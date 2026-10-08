@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Polygon, Polyline, CircleMarker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import type { LineFeature } from '../../types/domain';
+import type { LineFeature, LayerBundle, HeatTile } from '../../types/domain';
 import { HeatTileGrid } from './HeatTileGrid';
-import { layers } from '../../data/datasets';
 import type { Place } from '../../data/places';
 import { PLACES } from '../../data/places';
 
@@ -65,7 +64,9 @@ function FitBounds({ fit }: { fit: number }) {
   const map = useMap();
   useEffect(() => {
     if (fit <= 0) return;
-    map.flyTo([layers.tiles[(fit * 97) % layers.tiles.length]?.lat ?? 25.203, 55.279], Math.max(12, Math.min(16, 14 + fit)), { duration: 1.1 });
+    const t = 0;
+    map.flyTo([25.203, 55.279], Math.max(12, Math.min(16, 14 + t)), { duration: 1.1 });
+    void t;
   }, [fit, map]);
   return null;
 }
@@ -76,12 +77,16 @@ export function HeatMap({
   onPick,
   selected,
   focusSignal,
+  layers,
+  gridTiles,
 }: {
   hour: number;
   layersFlags: LayerFlags;
   onPick: (p: SelectedPoint) => void;
   selected: SelectedPoint | null;
   focusSignal: number;
+  layers: LayerBundle | null;
+  gridTiles: HeatTile[];
 }) {
   const [cursor, setCursor] = useState({ lat: 25.203, lon: 55.279 });
   const heatOpacity = layersFlags.heat ? 0.6 : 0;
@@ -101,9 +106,8 @@ export function HeatMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
           maxZoom={18}
         />
-        {layersFlags.heat && <HeatTileGrid tiles={layers.tiles} hour={hour} opacity={heatOpacity} />}
-        {layersFlags.built &&
-          layers.buildings.slice(0, 6000).map((b, i) => (
+        {layersFlags.heat && <HeatTileGrid tiles={gridTiles} hour={hour} opacity={heatOpacity} />}
+        {layersFlags.built && layers?.buildings.slice(0, 6000).map((b, i) => (
             <Polygon
               key={`b-${i}`}
               positions={b.g as [number, number][]}
@@ -111,8 +115,7 @@ export function HeatMap({
               interactive={false}
             />
           ))}
-        {layersFlags.water &&
-          layers.water.map((w, i) => (
+        {layersFlags.water && layers?.water.map((w, i) => (
             <Polygon
               key={`w-${i}`}
               positions={w.g as [number, number][]}
@@ -120,8 +123,7 @@ export function HeatMap({
               interactive={false}
             />
           ))}
-        {layersFlags.vegetation &&
-          layers.green.map((g, i) => (
+        {layersFlags.vegetation && layers?.green.map((g, i) => (
             <Polygon
               key={`g-${i}`}
               positions={g.g as [number, number][]}
@@ -129,8 +131,7 @@ export function HeatMap({
               interactive={false}
             />
           ))}
-        {layersFlags.roads &&
-          layers.roads.slice(0, 2600).map((r: LineFeature, i) => (
+        {layersFlags.roads && layers?.roads.slice(0, 2600).map((r: LineFeature, i) => (
             <Polyline
               key={`r-${i}`}
               positions={r.g as [number, number][]}

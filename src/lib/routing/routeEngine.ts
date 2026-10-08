@@ -13,7 +13,7 @@
  * "balanced", "cooler") to produce alternatives, then scores each one
  * with the same underlying exposure model.
  */
-import type { Graph, GraphNode, LonLat, TimeOfDay } from '../../types/domain';
+import type { Graph, GraphNode, HeatTile, LonLat, TimeOfDay } from '../../types/domain';
 import { airTempAtTile, heatIndexFor } from '../heat/heatModel';
 import { METER_PER_DEG_LAT, METER_PER_DEG_LON, distMeters } from '../geo/geo';
 
@@ -42,6 +42,8 @@ export interface RouteResult {
   /** route heat score 0..100 (distance-weighted mean edge exposure) */
   heatScore: number;
   cost: number;
+  /** Fastest / Balanced / Cooler classification used by the UI */
+  label: 'Fastest' | 'Balanced' | 'Cooler';
 }
 
 export interface RouteOptions {
@@ -90,16 +92,28 @@ function unpackPath(parent: Map<number, number>, target: number): number[] {
 }
 
 /** Tile-lozenge describing an edge midpoint (no per-node OSM heat attrs). */
-function edgeMidTile(e: { mid: [number, number] }): {
-  lon: number; lat: number; r: number; c: number; b: number; p: number; g: number; wt: number; pd: number; h: number;
-} {
+function edgeMidTile(e: { mid: [number, number] }): HeatTile {
   return { lon: e.mid[0], lat: e.mid[1], r: 0, c: 0, b: 0, p: 0, g: 0, wt: 0, pd: 0, h: 0 };
 }
 
 /**
  * Compute the Fastest / Balanced / Cooler alternatives.
+ *
+ * `tileLookup` maps an edge midpoint to the nearest heat-grid tile so the
+ * route weighting reflects the actual urban fabric.
+ *
+ * The cooler option is not a single uniform weight — after the fastest path
+ * is found its edges are penalised so the search must explore a different
+ * street combination. This produces genuinely distinct alternatives instead
+ * of the same polyline re-scored.
  */
-export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: RouteOptions): RouteResult[] {
+export function computeRoutes(
+  graph: Graph,
+  from: LonLat,
+  to: LonLat,
+  opts: RouteOptions,
+  tileLookup: (lon: number, lat: number) => HeatTile | null = () => null,
+): RouteResult[] {
   const hour = opts.hour ?? 14;
   const a = snapNode(graph, from);
   const b = snapNode(graph, to);
@@ -110,15 +124,19 @@ export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: Rout
   const surfByEdge = new Map<number, number>();
   for (const e of graph.edges) {
     const mid = edgeMidTile(e);
-    const hi = heatIndexFor(mid, hour);
+    const tile = tileLookup(e.mid[0], e.mid[1]) ?? mid;
+    const hi = heatIndexFor(tile, hour);
     heatByEdge.set(edgeKey(e.a, e.b), hi);
-    surfByEdge.set(edgeKey(e.a, e.b), airTempAtTile(mid, hour));
+    surfByEdge.set(edgeKey(e.a, e.b), airTempAtTile(tile, hour));
   }
 
   const SPEED_MPS = opts.walkingSpeed / 3.6;
 
-  // Dijkstra with a custom edge length.
-  const dijk = (costFn: (w: { hi: number; len: number }) => number): Map<number, number> => {
+  // Dijkstra with a custom edge cost; `penalty` multiplies edge weights.
+  const dijk = (
+    costFn: (w: { hi: number; len: number }) => number,
+    penalty: Map<number, number> = new Map(),
+  ): Map<number, number> => {
     const dist = new Map<number, number>();
     const parent = new Map<number, number>();
     const visited = new Set<number>();
@@ -137,7 +155,7 @@ export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: Rout
         if (v < 0 || visited.has(v)) continue;
         const key = edgeKey(e.a, e.b);
         const hi = heatByEdge.get(key) ?? 40;
-        const w = costFn({ hi, len: e.len });
+        const w = costFn({ hi, len: e.len }) * (penalty.get(key) ?? 1);
         const nd = d + w;
         if (nd < (dist.get(v) ?? Infinity)) {
           dist.set(v, nd);
@@ -150,11 +168,6 @@ export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: Rout
   };
 
   const pref = Math.min(1, Math.max(0, opts.preference));
-
-  const parentFast = dijk(({ len }) => len);
-  const parentCool = dijk(({ hi, len }) => len * (0.35 + (hi / 100) * 1.75));
-  // Balanced: blend distance and exposure by the user preference.
-  const parentBal = dijk(({ hi, len }) => len * (1 - 0.42 * pref + (hi / 100) * 1.5 * pref));
 
   const trace = (parent: Map<number, number>): RouteResult | null => {
     const chain = unpackPath(parent, b.id);
@@ -170,7 +183,8 @@ export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: Rout
       const hi = heatByEdge.get(key) ?? 40;
       const st = surfByEdge.get(key) ?? 38;
       const exposed = Math.min(0.96, Math.max(0.15, 0.26 + (hi / 100) * 0.6));
-      segs.push({ from: n0, to: n1, dist: d, exposed, surfaceTemp: st, heatIndex: hi, cls: '' });
+      const cls = '';
+      segs.push({ from: n0, to: n1, dist: d, exposed, surfaceTemp: st, heatIndex: hi, cls });
       distanceM += d;
       cost += d * hi;
     }
@@ -186,35 +200,74 @@ export function computeRoutes(graph: Graph, from: LonLat, to: LonLat, opts: Rout
       shadedMin: Math.max(0, durationMin - exposedMin),
       heatScore: Math.round(cost / distanceM),
       cost: cost / distanceM,
+      label: 'Balanced',
     };
   };
 
   const routes: RouteResult[] = [];
+
+  // 1) Fastest — distance only.
+  const parentFast = dijk(({ len }) => len);
+  const fast = trace(parentFast);
+  if (fast) {
+    routes.push(fast);
+    // 2) Balanced: distance + real exposure blend, penalise the fastest path.
+    const pen1 = new Map<number, number>();
+    for (let i = 0; i < fast.geometry.length - 1; i++) {
+      const k = edgeKey(fast.segments[i].from.id, fast.segments[i].to.id);
+      pen1.set(k, 2.4);
+    }
+    const bal = trace(
+      dijk(({ hi, len }) => len * (1 - 0.45 * pref + (hi / 100) * 1.35 * pref), pen1),
+    );
+    if (bal) routes.push(bal);
+  }
+  // 3) Cooler: strong exposure weight on top of penalties from both paths.
+  const pen2 = new Map<number, number>();
+  for (const r of routes) {
+    for (const s of r.segments) {
+      const k = edgeKey(s.from.id, s.to.id);
+      pen2.set(k, 3.6);
+    }
+  }
+  const cool = trace(dijk(({ hi, len }) => len * (0.22 + (hi / 100) * 2.0), pen2));
+  if (cool) routes.push(cool);
+
+  // Deduplicate by full geometry signature.
   const seen = new Set<string>();
-  const push = (r: RouteResult | null) => {
-    if (!r) return;
-    const sig = r.geometry.slice(0, 8).map((p) => p.map((v) => v.toFixed(4)).join(',')).join('|');
-    if (seen.has(sig)) return;
+  const unique = routes.filter((r) => {
+    const sig = r.geometry.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
+    if (seen.has(sig)) return false;
     seen.add(sig);
-    routes.push(r);
-  };
+    return true;
+  });
 
-  push(trace(parentFast));
-  push(trace(parentBal));
-  push(trace(parentCool));
-  if (routes.length < 2) push(trace(dijk(({ hi, len }) => len * (0.18 + (hi / 100) * 2.2))));
-  if (routes.length < 2) push(trace(dijk(({ hi, len }) => len * (0.02 + (hi / 18)))));
-
-  routes.sort((x, y) => x.durationMin - y.durationMin);
-  return routes;
+  // Classify by measured time & heat, then present Fastest first and keep
+  // the genuine low-heat alternative visible as "Cooler".
+  let fastest = unique[0];
+  let coolest = unique[0];
+  for (const r of unique) {
+    if (r.durationMin < fastest.durationMin) fastest = r;
+    if (r.heatScore < coolest.heatScore) coolest = r;
+  }
+  for (const r of unique) {
+    if (r === fastest) r.label = 'Fastest';
+    else if (r === coolest) r.label = 'Cooler';
+    else r.label = 'Balanced';
+  }
+  unique.sort((a, b) => {
+    if (a === fastest) return -1;
+    if (b === fastest) return 1;
+    return a.durationMin - b.durationMin;
+  });
+  return unique;
 }
 
 /** Human-readable tagline for a route in the result list. */
-export function routeTagline(route: RouteResult, indexInTrip: number): string {
-  if (indexInTrip === 0) return 'Fastest option';
-  if (route.heatScore < 34) return 'Recommended for lower heat exposure';
-  if (route.heatScore < 50) return 'Best balance between time and heat exposure';
-  return 'Cooler option';
+export function routeTagline(route: RouteResult): string {
+  if (route.label === 'Fastest') return 'Fastest option';
+  if (route.label === 'Cooler') return 'Recommended for lower heat exposure';
+  return 'Best balance between time and heat exposure';
 }
 
 export function fmtMin(m: number): string {

@@ -5,7 +5,7 @@ import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
 import { DistrictQuickLinks } from '../components/ui/DistrictQuickLinks';
 import { DISTRICTS } from '../data/places';
-import { layers } from '../data/datasets';
+import { tileLoadState, useLayers } from '../hooks/useData';
 import { heatIndexFor, surfaceTempFor, airTempAtTile, bandLabel, heatBand, shadePotential } from '../lib/heat/heatModel';
 import { districtStatsFor } from '../lib/heat/districtStats';
 import { type LonLat } from '../types/domain';
@@ -26,7 +26,8 @@ export default function ExplorerPage() {
   const [selected, setSelected] = useState<SelectedPoint | null>(null);
   const [focusSignal, setFocusSignal] = useState(0);
 
-  const allTiles = layers.tiles;
+  // Heavy OSM layers load lazily; the map renders a placeholder until ready.
+  const { layers, ready } = useLayers();
   const districts = useMemo(() => districtStatsFor(DISTRICTS, hour), [hour]);
 
   const toggle = (k: keyof LayerFlags) => setFlags((f) => ({ ...f, [k]: !f[k] }));
@@ -46,12 +47,19 @@ export default function ExplorerPage() {
       </header>
 
       <div className="explorer-body">
+        {!ready ? (
+          <div className="map-loading">
+            <span className="data-label">Loading urban data…</span>
+          </div>
+        ) : null}
         <HeatMap
           hour={hour}
           layersFlags={flags}
           onPick={(p) => setSelected(p)}
           selected={selected}
           focusSignal={focusSignal}
+          layers={layers}
+          gridTiles={tileLoadState()}
         />
         <aside className="explorer-side">
           <section className="panel">
@@ -83,7 +91,7 @@ export default function ExplorerPage() {
           </section>
         </aside>
 
-        {selected && <LocationPanel point={selected} hour={hour} onClose={() => setSelected(null)} tiles={allTiles} />}
+        {selected && <LocationPanel point={selected} hour={hour} onClose={() => setSelected(null)} tiles={tileLoadState()} />}
       </div>
     </div>
   );

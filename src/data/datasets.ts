@@ -11,12 +11,35 @@
  */
 import type { Graph, HeatGrid, LayerBundle } from '../types/domain';
 import tilesRaw from './dubai/tiles.json';
-import layersRaw from './dubai/layers.json';
-import graphRaw from './dubai/graph.json';
 
+/** Bundled heat grid (small, used by the landing + explorer grids). */
 export const tiles = tilesRaw as HeatGrid;
-export const layers = layersRaw as unknown as LayerBundle;
-export const graph = graphRaw as unknown as Graph;
+
+/**
+ * The OSM layer geometries and route graph are heavy (≈ 9 MB combined), so
+ * they are served from `public/data/` and fetched lazily the first time a
+ * page needs them. This keeps the initial JS bundle small.
+ */
+let layersPromise: Promise<LayerBundle> | null = null;
+let graphPromise: Promise<Graph> | null = null;
+
+export function fetchLayers(): Promise<LayerBundle> {
+  if (!layersPromise) {
+    layersPromise = fetch(import.meta.env.BASE_URL + 'data/layers.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`layers fetch failed: ${r.status}`))))
+      .then((d) => d as LayerBundle);
+  }
+  return layersPromise;
+}
+
+export function fetchGraph(): Promise<Graph> {
+  if (!graphPromise) {
+    graphPromise = fetch(import.meta.env.BASE_URL + 'data/graph.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`graph fetch failed: ${r.status}`))))
+      .then((d) => d as Graph);
+  }
+  return graphPromise;
+}
 
 export interface DatasetMeta {
   id: string;

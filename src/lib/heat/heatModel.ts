@@ -22,6 +22,7 @@
  * a medically validated heat-risk system.
  */
 import type { HeatModelConfig, HeatTile } from '../../types/domain';
+import { METER_PER_DEG_LAT, METER_PER_DEG_LON } from '../geo/geo';
 
 export const DIURNAL_TIMES = [8, 10, 12, 14, 15, 17, 18, 20, 21] as const;
 export const DEFAULT_HOUR = 14 as const;
@@ -193,4 +194,52 @@ export function bandLabel(band: number): string {
 
 export function bandColor(band: number): string {
   return ['#3f7d78', '#8a9a5b', '#d9a94e', '#d9771f', '#b4521c'][band] ?? '#d9a94e';
+}
+
+/**
+ * Thin nearest-tile lookup over the heat grid. Builds once per grid and
+ * answers "which tile is nearest to (lon,lat)" in O(1) via a coarse
+ * bucket index. Used by routing to estimate edge-level exposure.
+ */
+export function createTileLookup(grid: Pick<HeatTile, 'lon' | 'lat'>[]) {
+  const BUCKETS = 64;
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const t of grid) {
+    if (t.lon < minLon) minLon = t.lon;
+    if (t.lon > maxLon) maxLon = t.lon;
+    if (t.lat < minLat) minLat = t.lat;
+    if (t.lat > maxLat) maxLat = t.lat;
+  }
+  const spanLon = maxLon - minLon || 1e-6;
+  const spanLat = maxLat - minLat || 1e-6;
+  const buckets: HeatTile[][] = Array.from({ length: BUCKETS * BUCKETS }, () => []);
+  for (const t of grid) {
+    const bx = Math.min(BUCKETS - 1, Math.floor(((t.lon - minLon) / spanLon) * BUCKETS));
+    const by = Math.min(BUCKETS - 1, Math.floor(((t.lat - minLat) / spanLat) * BUCKETS));
+    buckets[by * BUCKETS + bx].push(t as HeatTile);
+  }
+  return function nearest(lon: number, lat: number): HeatTile | null {
+    const bx = Math.min(BUCKETS - 1, Math.max(0, Math.floor(((lon - minLon) / spanLon) * BUCKETS)));
+    const by = Math.min(BUCKETS - 1, Math.max(0, Math.floor(((lat - minLat) / spanLat) * BUCKETS)));
+    let best: HeatTile | null = null;
+    let bestD = Infinity;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const cxx = bx + dx;
+        const cyy = by + dy;
+        if (cxx < 0 || cyy < 0 || cxx >= BUCKETS || cyy >= BUCKETS) continue;
+        for (const t of buckets[cyy * BUCKETS + cxx]) {
+          const d = Math.hypot((t.lon - lon) * METER_PER_DEG_LON, (t.lat - lat) * METER_PER_DEG_LAT);
+          if (d < bestD) {
+            bestD = d;
+            best = t;
+          }
+        }
+      }
+    }
+    return best;
+  };
 }

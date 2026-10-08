@@ -57,9 +57,10 @@ src/
     geo/           geo.ts (distance/coordinate helpers)
   data/
     places.ts      curated landmarks/districts/POIs (demonstration coordinates)
-    datasets.ts    data catalog / provenance registry (loads processed JSON)
-    dubai/         processed data: grid/tiles/layers/graph (bundled assets)
-  hooks/           useSmoothScroll, usePrefersReducedMotion
+    datasets.ts    data catalog + lazy loaders (fetchLayers / fetchGraph); tiles.json bundled
+    dubai/         tiles.json (bundled heat grid, ~128 KB)
+  hooks/           useSmoothScroll, usePrefersReducedMotion, useData (useLayers/useGraph)
+  public/data/     layers.json + graph.json (~4.6 MB each) served statically, fetched lazily
   types/           domain.ts
   styles/          global.css (tokens), components.css (component & page styles)
 ```
@@ -101,8 +102,14 @@ Every value shown has a provenance. There are exactly three categories (see §28
 ## Route model (`src/lib/routing/routeEngine.ts`)
 
 - Dijkstra on the OSM-derived graph (approx 31k nodes / 34k edges) using an edge weight that blends
-  distance (or time) with estimated heat exposure.
-- Three alternatives: `fastest`, `balanced`, `coolest` (with DCUR-inspired alternative generation).
+  distance (or time) with estimated heat exposure (`heatIndexFor` on the nearest tile at each edge
+  midpoint, via `createTileLookup`).
+- Three alternatives via **edge-penalty re-routing**: the fastest path is found first; the balanced
+  option blends distance + exposure (by the user preference) and is penalised off the fastest path;
+  then a strong exposure-weighted re-run is penalised off both prior paths. Each alternative is a
+  genuinely distinct street combination.
+- Routes are classified by measured time/heat into **Fastest / Balanced / Cooler** labels; the
+  low-heat alternative is tagged "Recommended for lower heat exposure".
 - User preference slider maps to a blend coefficient: left = distance/time, right = exposure.
 - Segment-level breakdowns: distance, duration, heat score, exposed vs shaded/protected time.
 - Always worded "recommended for lower heat exposure" — never "this is the correct route".
@@ -116,9 +123,10 @@ Every value shown has a provenance. There are exactly three categories (see §28
 ## Data pipeline (Node/ESM in `scripts/data/`)
 
 - `fetch-overpass.mjs` — queries Overpass API by category with HTTP-500 retry/backoff → `data/raw/*.json`.
-- `process.mjs` — rasterizes OSM features into a tile grid (44×32 → 1408 cells), layer
-  geometries, and a routable street graph → `src/data/dubai/*.json` (also `data/processed/`).
-- Processed outputs are bundled into the app (kept small: ~10 MB total; tiles ~128 KB).
+- `process.mjs` — rasterizes OSM features into a tile grid, layer geometries, and a routable
+  street graph. `tiles.json` is written to `src/data/dubai/` (bundled, ~128 KB); `layers.json`
+  and `graph.json` are written to `public/data/` and fetched lazily at runtime.
+- Bundle optimisation: initial JS is ~700 KB (211 KB gzip); heavy vector data loads on demand.
 
 Run: `npm run fetch:data` then `npm run process:data`.
 Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed).
@@ -164,8 +172,14 @@ Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed)
   legend, crosshair + cursor readout, and a click-to-inspect location panel with interpretable
   "why this score". All heat values labelled DERIVED/SIMULATED.
 
+**Complete (continued)**
+- Route Planner page: map + From/To + departure time + walk/cycle mode + Fastest / Balanced /
+  Cooler alternatives via penalty-based re-routing + preference slider + per-route heat breakdown
+  (exposed vs shaded minutes, heat score). Browser-verified.
+- Bundle/performance fix: `layers.json` + `graph.json` moved out of the JS bundle into
+  `public/data/` and lazy-loaded (`useLayers` / `useGraph`). Initial bundle ~700 KB (211 KB gzip).
+
 **In progress**
-- Route Planner page (map + From/To + alternatives + preference slider + breakdown).
 - Intervention Simulator page (sliders + scenario map + before/after + comparison table + charts).
 - Dashboard page (district stats, trends).
 - Methodology page (/about) with data catalog + model documentation + limitations.

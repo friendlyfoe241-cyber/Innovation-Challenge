@@ -22,6 +22,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RAW = join(__dirname, '..', '..', 'data', 'raw');
 const OUT = join(__dirname, '..', '..', 'src', 'data', 'dubai');
+/** Heavy assets are served from public/ and fetched lazily. */
+const OUT_PUBLIC = join(__dirname, '..', '..', 'public', 'data');
 
 // ---------------------------------------------------------------- geometry
 
@@ -469,15 +471,16 @@ export function buildGraph() {
 // ---------------------------------------------------------------- main
 
 mkdirSync(OUT, { recursive: true });
+mkdirSync(OUT_PUBLIC, { recursive: true });
 
 const grid = buildGrid();
 writeFileSync(join(OUT, 'tiles.json'), JSON.stringify(grid));
 console.log(`tiles.json → ${grid.tiles.length} tiles`);
 
 const layers = buildLayers();
-writeFileSync(join(OUT, 'layers.json'), JSON.stringify(layers));
-console.log(`layers.json → buildings ${layers.buildings.length}, roads ${layers.roads.length}, paths ${layers.paths.length}, green ${layers.green.length}, water ${layers.water.length}, pois ${layers.pois.length}, schools ${layers.schools.length}`);
+writeFileSync(join(OUT_PUBLIC, 'layers.json'), JSON.stringify(layers));
+console.log(`public/data/layers.json → buildings ${layers.buildings.length}, roads ${layers.roads.length}, paths ${layers.paths.length}, green ${layers.green.length}, water ${layers.water.length}, pois ${layers.pois.length}, schools ${layers.schools.length}`);
 
 const graph = buildGraph();
-writeFileSync(join(OUT, 'graph.json'), JSON.stringify(graph));
-console.log(`graph.json → ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
+writeFileSync(join(OUT_PUBLIC, 'graph.json'), JSON.stringify(graph));
+console.log(`public/data/graph.json → ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
