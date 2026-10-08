@@ -158,9 +158,13 @@ Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed)
   ThermalScale legend, Provenance badges, SolarTimeline sun-arc widget.
 - Lenis + GSAP scaffolding (reduced-motion aware) via hooks.
 - Landing page complete (hero canvas field, storytelling sections, CTAs).
+- Urban Heat Explorer page complete: interactive Leaflet map with live OSM base tiles, heat grid
+  (per-tile Heat Exposure Index coloured by band), buildings/vegetation/water/roads/school layers,
+  hour-of-day SolarTimeline control, neighbourhood quick-cards (district stats), thermal scale
+  legend, crosshair + cursor readout, and a click-to-inspect location panel with interpretable
+  "why this score". All heat values labelled DERIVED/SIMULATED.
 
 **In progress**
-- Heat Explorer page (map + tiles heat layer + time controls + location panel).
 - Route Planner page (map + From/To + alternatives + preference slider + breakdown).
 - Intervention Simulator page (sliders + scenario map + before/after + comparison table + charts).
 - Dashboard page (district stats, trends).
