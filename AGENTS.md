@@ -195,9 +195,16 @@ Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed)
   shade potential, built density, intervention), time-of-day control and a school-mode campus
   panel (GEMS Wellington) with clearly labelled simulated zones.
 
-**In progress**
-- Phase 8 polish & QA: responsive pass, accessibility, performance, animation refinement,
-  error handling, final data audit.
+**Phase 8 — polish & QA (done)**
+- Removed unused `recharts` dependency (visualisations are hand-built CSS).
+- Production build verified: `dist` 10 MB total; JS bundle 723 KB minified (218 KB gzip);
+  heavy data (`public/data/*.json`) served statically and lazy-fetched. All 6 routes return 200.
+- Browser-verified end-to-end: landing hero + storytelling; explorer tabs; route planner
+  (Fastest 42m/3.5km Heat 77, Cooler 44m/3.6km Heat 73, Balanced 46m/3.8km Heat 77);
+  intervention simulator (Vegetation 31.6%, Shade 8.5%, Reflective 6.1%, Depave 6.7%);
+  dashboard + methodology pages.
+- `prefers-reduced-motion` respected (Lenis/GSAP skipped). Mobile dropdown nav + stacking layouts.
+- Data audit: every number is OBSERVED (OSM), DERIVED (documented model), or SIMULATED (labelled).
 
 **Known limitations**
 - Heat values are DERIVED/SIMULATED — no satellite LST or air-temperature feed yet.
