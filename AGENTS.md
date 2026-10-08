@@ -36,7 +36,7 @@ Core loop: **Observe → Navigate → Improve**.
 - Tailwind is NOT used — custom CSS design system (`src/styles/`)
 - Leaflet + react-leaflet for maps
 - GSAP + Lenis (smooth scroll), respecting `prefers-reduced-motion`
-- Recharts (dashboard/sim charts)
+- No chart library — data visualisations are hand-built CSS bars and instrument readouts (kept the bundle lean)
 - ESM Node scripts under `scripts/data/` for the data pipeline
 - Fonts: Geist (display) + Manrope (body) + IBM Plex Mono (labels) via @fontsource
 
