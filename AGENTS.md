@@ -187,10 +187,17 @@ Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed)
   bug in `scenarioModel.ts` (the shade term was added instead of subtracted) — simulated impacts
   now cool sensibly. Browser-verified (Vegetation 31.6%, Shade 8.5%, Reflective 6.1%, Depave 6.7%).
 
+**Complete (continued)**
+- Methodology page (/about): problem/approach, 5-step pipeline, data-source catalog with
+  OBSERVED/DERIVED/SIMULATED tags, documented Heat Exposure Index weights (50/8/17/14/11),
+  LST ≠ air-temperature callout, school-mode section, limitations, roadmap, transparency note.
+- Dashboard page: corridor summary, district cards (index, band, modelled LST, vegetation,
+  shade potential, built density, intervention), time-of-day control and a school-mode campus
+  panel (GEMS Wellington) with clearly labelled simulated zones.
+
 **In progress**
-- Dashboard page (district stats, trends).
-- Methodology page (/about) with data catalog + model documentation + limitations.
-- School / campus overview mode (GEMS deployment use-case).
+- Phase 8 polish & QA: responsive pass, accessibility, performance, animation refinement,
+  error handling, final data audit.
 
 **Known limitations**
 - Heat values are DERIVED/SIMULATED — no satellite LST or air-temperature feed yet.
