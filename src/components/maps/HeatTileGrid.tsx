@@ -26,16 +26,18 @@ export const HeatTileGrid = memo(function HeatTileGrid({
   tiles,
   hour,
   opacity = 0.62,
+  heatFn,
 }: {
   tiles: HeatTile[];
   hour: number;
   opacity?: number;
+  heatFn?: (t: HeatTile, h: number) => number;
 }) {
   const { x, y } = cellSize(tiles);
   return (
     <LayerGroup>
       {tiles.map((t) => {
-        const hi = heatIndexFor(t, hour);
+        const hi = heatFn ? heatFn(t, hour) : heatIndexFor(t, hour);
         const band = heatBand(hi);
         const col = bandColor(band);
         return (

@@ -62,7 +62,7 @@ export function applyIntervention(tile: HeatTile, sliders: InterventionSliders):
   // We encode this by nudging the albedo term through tile fields:
   // (paved surfaces become brighter → handled as a thermal offset below)
   const offset =
-    s * SENSITIVITY.shadeCool * (1 - Math.min(0.7, tile.g * 1.4)) -
+    -s * SENSITIVITY.shadeCool * (1 - Math.min(0.7, tile.g * 1.4)) -
     r * SENSITIVITY.reflectCool * 0.9 -
     d * SENSITIVITY.depaveCool * (1 - tile.g) * 0.8 -
     v * SENSITIVITY.vegCool * open;

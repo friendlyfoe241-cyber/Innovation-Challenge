@@ -1669,6 +1669,173 @@
     max-height: 46vh;
   }
 }
+/* ---------- Intervention Simulator ---------- */
+.sim-page .explorer-body {
+  min-height: 640px;
+}
+.sim-badge {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgb(246 242 234 / 0.94);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+}
+.sim-slider {
+  display: block;
+  margin-bottom: 14px;
+}
+.sim-slider-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sim-slider-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+}
+.sim-slider-val {
+  font-size: 12px;
+  color: var(--t-hot);
+}
+.sim-slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--t-mild), var(--t-warm) 55%, var(--t-hot));
+  outline-offset: 4px;
+}
+.sim-slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+}
+.sim-slider input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+}
+.sim-slider-hint {
+  display: block;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.sim-reset {
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+.sim-outcome {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sim-metric {
+  flex: 1 1 90px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--bg);
+  padding: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.sim-metric strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--t-hot);
+}
+.sim-metric .data-label {
+  display: block;
+  flex-basis: 100%;
+  margin-bottom: 8px;
+}
+.sim-metric-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.sim-metric.is-scenario strong {
+  color: var(--t-cool);
+}
+.sim-arrow {
+  align-self: center;
+  font-size: 18px;
+  color: var(--ink-3);
+}
+.sim-delta {
+  flex-basis: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+}
+.sim-delta-num {
+  font-size: 18px;
+  color: var(--t-cool);
+}
+.sim-note {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 10px;
+  line-height: 1.5;
+}
+.sim-impacts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sim-impact-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sim-impact-head .mono {
+  color: var(--t-cool);
+}
+.sim-impact-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  margin-top: 5px;
+  overflow: hidden;
+}
+.sim-impact-bar span {
+  display: block;
+  height: 100%;
+  background: var(--t-cool);
+  border-radius: 999px;
+}
+.sim-impact-detail {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
 
 /* reveal defaults so content is visible when JS is not ready */
 [data-reveal] {

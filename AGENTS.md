@@ -179,10 +179,18 @@ Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed)
 - Bundle/performance fix: `layers.json` + `graph.json` moved out of the JS bundle into
   `public/data/` and lazy-loaded (`useLayers` / `useGraph`). Initial bundle ~700 KB (211 KB gzip).
 
+**Complete (continued)**
+- Intervention Simulator page: 4 intervention sliders (vegetation, shaded walkways, reflective
+  surfaces, depave), live scenario heat grid on the Leaflet map (baseline fades, scenario overlay
+  re-scores tiles with `heatIndexAfter`), baseline vs scenario Heat Exposure Index, potential
+  improvement %, and a per-intervention impact comparison ("What matters most"). Fixed a shade-sign
+  bug in `scenarioModel.ts` (the shade term was added instead of subtracted) — simulated impacts
+  now cool sensibly. Browser-verified (Vegetation 31.6%, Shade 8.5%, Reflective 6.1%, Depave 6.7%).
+
 **In progress**
-- Intervention Simulator page (sliders + scenario map + before/after + comparison table + charts).
 - Dashboard page (district stats, trends).
 - Methodology page (/about) with data catalog + model documentation + limitations.
+- School / campus overview mode (GEMS deployment use-case).
 
 **Known limitations**
 - Heat values are DERIVED/SIMULATED — no satellite LST or air-temperature feed yet.
