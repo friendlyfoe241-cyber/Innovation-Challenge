@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { InterventionMap } from '../components/maps/InterventionMap';
 import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
@@ -15,7 +15,7 @@ const SLIDERS: { key: SliderKey; label: string; hint: string }[] = [
 
 export default function SimulatePage() {
   const { value: model, ready, error } = useSpatialModel(); const [hour, setHour] = useState(14); const [sliders, setSliders] = useState<InterventionSliders>(EMPTY_INTERVENTION); const [view, setView] = useState<View>('scenario');
-  const field = useMemo(() => model ? buildScenarioField(model, hour, sliders) : null, [model, hour, sliders]); const summary = useMemo(() => field ? scenarioSummary(field) : null, [field]);
+  const deferredSliders = useDeferredValue(sliders); const field = useMemo(() => model ? buildScenarioField(model, hour, deferredSliders) : null, [model, hour, deferredSliders]); const summary = useMemo(() => field ? scenarioSummary(field) : null, [field]);
   if (!ready || !model || !field || !summary) return <div className="map-loading"><span className="data-label">Loading intervention surface masks…</span>{error && <p>{error}</p>}</div>;
   const set = (key: SliderKey, value: number) => setSliders((current) => ({ ...current, [key]: value }));
   const eligible = [...field.masks.values()].reduce((total, mask) => total + (mask.vegetation > 0 || mask.shade > 0 || mask.reflective > 0 || mask.depave > 0 ? 1 : 0), 0);

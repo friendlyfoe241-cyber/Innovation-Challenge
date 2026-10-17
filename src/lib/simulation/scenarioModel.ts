@@ -6,7 +6,7 @@
  * slider applies a uniform blanket adjustment.
  */
 import type { SpatialCell, SpatialModel } from '../../types/domain';
-import { calculateBaseField, clamp01 } from '../heat/heatModel';
+import { calculateBaseField, cellAt, clamp01 } from '../heat/heatModel';
 
 export interface InterventionSliders {
   vegetation: number;
@@ -57,7 +57,6 @@ export function buildScenarioField(model: SpatialModel, hour: number, sliders: I
   const scenario = new Map(baseline);
   const difference = new Map<number, number>();
   const masks = new Map<number, InterventionMask>();
-  const cellByKey = new Map(model.cells.map((cell) => [cell.r * model.grid.cols + cell.c, cell]));
   const localCooling = new Map<number, number>();
   const carryCooling = new Map<number, number>();
   const s = {
@@ -82,7 +81,7 @@ export function buildScenarioField(model: SpatialModel, hour: number, sliders: I
         if (!dr && !dc) continue;
         const distance = Math.hypot(dr, dc) * model.grid.cellSizeM;
         if (distance > 1200) continue;
-        const neighbour = cellByKey.get((cell.r + dr) * model.grid.cols + cell.c + dc);
+        const neighbour = cellAt(model, cell.r + dr, cell.c + dc);
         if (!neighbour || ineligible(neighbour)) continue;
         const weight = 0.35 * Math.exp(-0.5 * (distance / 620) ** 2);
         carryCooling.set(neighbour.id, (carryCooling.get(neighbour.id) ?? 0) + spill * weight);

@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type { LonLat, SpatialModel } from '../../types/domain';
-import { DUBAI_DEFAULT_VIEW } from '../../data/datasets';
+import { DUBAI_DEFAULT_VIEW, mapBoundsFor } from '../../data/datasets';
 import { ThermalFieldLayer } from './ThermalFieldLayer';
 import { calculateBaseField } from '../../lib/heat/heatModel';
 
@@ -19,22 +19,39 @@ function FocusPoint({ point }: { point: SelectedPoint | null }) {
 }
 
 export function HeatMap({ model, hour, selected, onPick }: { model: SpatialModel; hour: number; selected: SelectedPoint | null; onPick: (p: SelectedPoint) => void }) {
-  const [cursor, setCursor] = useState<LonLat>({ lon: DUBAI_DEFAULT_VIEW.lon, lat: DUBAI_DEFAULT_VIEW.lat });
-  const values = calculateBaseField(model, hour);
+  const readout = useRef<HTMLSpanElement>(null);
+  const values = useMemo(() => calculateBaseField(model, hour), [model, hour]);
+  const bounds = useMemo(() => mapBoundsFor(model), [model]);
   return <div className="thermo-map-wrap continuous-map-wrap">
-    <MapContainer center={[DUBAI_DEFAULT_VIEW.lat, DUBAI_DEFAULT_VIEW.lon]} zoom={DUBAI_DEFAULT_VIEW.zoom} className="thermo-map" zoomControl={false} maxZoom={18} minZoom={9} attributionControl>
-      <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors' maxZoom={18} />
+    <MapContainer center={[DUBAI_DEFAULT_VIEW.lat, DUBAI_DEFAULT_VIEW.lon]} zoom={DUBAI_DEFAULT_VIEW.zoom} className="thermo-map" zoomControl={false} maxZoom={18} minZoom={9} maxBounds={bounds} maxBoundsViscosity={0.8} attributionControl>
+      <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors' maxZoom={18} noWrap />
       <ThermalFieldLayer model={model} values={values} opacity={0.72} contours />
       {selected && <CircleMarker center={[selected.lat, selected.lon]} radius={7} pathOptions={{ color: '#fff', weight: 2, fillColor: '#d97a1e', fillOpacity: 1 }} />}
       <MapClick onPick={onPick} />
       <FocusPoint point={selected} />
-      <MapCenter onMove={setCursor} />
+      <CenterTracker target={readout} />
     </MapContainer>
     <div className="field-map-note"><span className="data-label">MODELLED FIELD</span><span>smooth display · {model.grid.cellSizeM} m source cells · contours 40 / 55 / 70 / 82</span></div>
-    <div className="map-cursor-readout"><span className="data-label">Cursor</span><span className="mono">{cursor.lat.toFixed(4)}°N · {cursor.lon.toFixed(4)}°E</span><span className="prov-tag" data-prov="DERIVED">OSM-derived</span></div>
+    <div className="map-cursor-readout"><span className="data-label">Cursor</span><span className="mono" ref={readout}>{DUBAI_DEFAULT_VIEW.lat.toFixed(4)}°N · {DUBAI_DEFAULT_VIEW.lon.toFixed(4)}°E</span><span className="prov-tag" data-prov="DERIVED">OSM-derived</span></div>
   </div>;
 }
-function MapCenter({ onMove }: { onMove: (p: LonLat) => void }) {
-  useMapEvents({ move(e: L.LeafletEvent) { const center = e.target.getCenter(); onMove({ lon: center.lng, lat: center.lat }); } });
+/**
+ * Writes the map centre straight into the readout element. It used to call
+ * setState on every `move` event, which re-rendered the whole map tree (and
+ * rebuilt the thermal layer) on every pan frame.
+ */
+function CenterTracker({ target }: { target: React.RefObject<HTMLSpanElement | null> }) {
+  const map = useMap();
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const c = map.getCenter();
+      if (target.current) target.current.textContent = `${c.lat.toFixed(4)}°N · ${c.lng.toFixed(4)}°E`;
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    map.on('move', schedule);
+    return () => { map.off('move', schedule); if (frame) cancelAnimationFrame(frame); };
+  }, [map, target]);
   return null;
 }

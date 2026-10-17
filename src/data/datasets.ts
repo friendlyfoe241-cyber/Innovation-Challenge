@@ -75,3 +75,13 @@ export const DATASETS: DatasetMeta[] = [
 ];
 
 export const DUBAI_DEFAULT_VIEW = { lat: 25.130, lon: 55.255, zoom: 10.55 };
+
+
+/**
+ * Pan limits for every map: the model extent plus a margin. Stops the map
+ * (and its base tiles) from wandering across repeated world copies when zoomed out.
+ */
+export function mapBoundsFor(model: { grid: { s: number; w: number; n: number; e: number } }, marginDeg = 0.5): [[number, number], [number, number]] {
+  const { s: south, w, n, e } = model.grid;
+  return [[south - marginDeg, w - marginDeg], [n + marginDeg, e + marginDeg]];
+}

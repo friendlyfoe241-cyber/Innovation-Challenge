@@ -120,3 +120,17 @@ Before a milestone commit: inspect `git status` and diffs, run relevant build/li
 - OSM completeness and access tagging vary; paths are provider results, not a safety/access guarantee.
 - Public Valhalla routing availability is best-effort and its OSM snapshot can differ from the fixed spatial-model snapshot.
 - Thermal potential and all intervention reductions are modelled, not observed or validated outcomes.
+
+## Map-layer performance & wrap fix (Oct 2026)
+
+- **Bug (repeating overlay when zoomed out):** grid lookups used `id = r * cols + c` with no bounds check, so
+  samples outside the grid wrapped onto cells from the neighbouring row and the field repeated every grid
+  width. All lookups now go through `cellAt` / `getModelIndex` / `buildDenseField` in `src/lib/heat/heatModel.ts`
+  (bounds-checked; outside the grid means "no data"). The same wrap existed in the scenario spill-over loop.
+- **Bug (slow / janky zoom-out):** the old layer re-sampled every screen pixel and re-traced contours on every
+  `moveend`/`zoomend`, and `HeatMap` re-rendered (and rebuilt the field) on every `move` event.
+  `ThermalFieldLayer` now rasterises the field once per (model, values, palette) into a canvas shown through a
+  Leaflet overlay (panned/zoomed by CSS transforms), and draws contours as vector polylines hidden below zoom 9.
+  Field maps are memoised per (model, hour); the cursor readout writes to the DOM directly instead of React state.
+- All three maps use `noWrap` tiles and `maxBounds` (`mapBoundsFor`) so the base map cannot show world copies.
+- Simulator sliders use `useDeferredValue` so dragging stays responsive.
