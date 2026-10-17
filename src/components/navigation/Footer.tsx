@@ -22,7 +22,7 @@ export function Footer() {
           </p>
           <p className="footer-note">
             Demonstration prototype for the GEMS Global Innovation Challenge 2026–27.
-            All temperatures and heat indices are modelled estimates.
+            Thermal potential and intervention outcomes are modelled, not observed temperatures.
           </p>
         </div>
         <div className="footer-col">

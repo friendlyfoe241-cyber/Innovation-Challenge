@@ -2,115 +2,17 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
-import { tileLoadState } from '../hooks/useData';
-import { districtStatsFor, DISTRICT_DEFAULTS, type DistrictStats } from '../lib/heat/districtStats';
-import { bandColor } from '../lib/heat/heatModel';
+import { useSpatialModel } from '../hooks/useData';
+import { bandColor, bandLabel, calculateBaseField, createFieldSampler, heatBand } from '../lib/heat/heatModel';
 
-const CAMPUS_ZONES = [
-  { name: 'Courtyard', exposure: 'High', index: 84 },
-  { name: 'Bus pickup area', exposure: 'High', index: 81, priority: true },
-  { name: 'Sports field', exposure: 'Elevated', index: 70 },
-  { name: 'North garden', exposure: 'Moderate', index: 58 },
-  { name: 'Covered walkways', exposure: 'Low', index: 44 },
+const AREAS = [
+  { name: 'Downtown Dubai', lon: 55.2765, lat: 25.1965 }, { name: 'Deira', lon: 55.327, lat: 25.267 }, { name: 'Dubai Marina', lon: 55.140, lat: 25.078 },
+  { name: 'Mirdif', lon: 55.426, lat: 25.226 }, { name: 'Al Barsha', lon: 55.205, lat: 25.110 }, { name: 'Dubai Hills', lon: 55.239, lat: 25.102 }, { name: 'Dubai South', lon: 55.365, lat: 24.964 },
 ];
-
 export default function DashboardPage() {
-  const tiles = useMemo(() => tileLoadState(), []);
-  const [hour, setHour] = useState(14);
-  const stats = useMemo(() => districtStatsFor(DISTRICT_DEFAULTS, hour), [tiles, hour]);
-  const mean = Math.round(stats.reduce((s, d) => s + d.heatIndex, 0) / Math.max(1, stats.length));
-  const hottest = [...stats].sort((a, b) => b.heatIndex - a.heatIndex)[0];
-  const coolest = [...stats].sort((a, b) => a.heatIndex - b.heatIndex)[0];
-
-  return (
-    <div className="dash">
-      <header className="dash-head container">
-        <div className="dash-head-top">
-          <div>
-            <p className="eyebrow">Dashboard</p>
-            <h1>Central Dubai corridor overview</h1>
-          </div>
-          <div className="explorer-solar">
-            <SolarTimeline hour={hour} onChange={(h) => setHour(h)} />
-          </div>
-        </div>
-        <div className="dash-summary">
-          <div className="dash-summary-metric">
-            <span className="data-label">Corridor mean index</span>
-            <strong>{mean}</strong>
-            <span className="mono">/100 · {hour}:00</span>
-          </div>
-          <div className="dash-summary-metric">
-            <span className="data-label">Highest exposure</span>
-            <strong className="dash-name">{hottest?.name}</strong>
-            <span className="mono">{hottest?.heatIndex}/100</span>
-          </div>
-          <div className="dash-summary-metric">
-            <span className="data-label">Lowest exposure</span>
-            <strong className="dash-name">{coolest?.name}</strong>
-            <span className="mono">{coolest?.heatIndex}/100</span>
-          </div>
-        </div>
-      </header>
-
-      <div className="container dash-body">
-        <div className="dash-grid">
-          {stats.map((d) => (
-            <DistrictCard key={d.id} d={d} />
-          ))}
-        </div>
-
-        <aside className="dash-campus">
-          <p className="eyebrow">School mode · demonstration</p>
-          <h2>GEMS Wellington Primary campus</h2>
-          <p className="dash-campus-lede">
-            A potential THERMO deployment: outdoor zones around the campus classified against the heat
-            grid. Demonstration classification only — not an official GFS analysis.
-          </p>
-          <ul className="campus-zone-list">
-            {CAMPUS_ZONES.map((z) => (
-              <li key={z.name} className="campus-zone">
-                <span className="campus-zone-name">
-                  {z.priority && <span className="campus-priority" title="Priority area">●</span>}
-                  {z.name}
-                </span>
-                <span className="campus-zone-exp">{z.exposure}</span>
-                <span className="campus-zone-idx mono">{z.index}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="campus-note">
-            <strong>Potential priority:</strong> bus pickup area — high exposure at the midday drop-off peak.
-            <span className="sim-label">Simulated zones</span>
-          </p>
-          <Link className="btn btn-ghost btn-md" to="/about#schools">See the campus use case →</Link>
-        </aside>
-
-        <ProvenanceNote kind="DERIVED" className="dash-provenance" />
-      </div>
-    </div>
-  );
+  const { value: model, ready } = useSpatialModel(); const [hour, setHour] = useState(14);
+  const cards = useMemo(() => { if (!model) return []; const sample = createFieldSampler(model, calculateBaseField(model, hour)); return AREAS.map((area) => ({ ...area, value: sample(area.lon, area.lat)?.value ?? null })); }, [model, hour]);
+  const valid = cards.filter((card) => card.value !== null); const mean = valid.reduce((sum, card) => sum + card.value!, 0) / Math.max(1, valid.length);
+  return <div className="dash"><header className="dash-head container"><div className="dash-head-top"><div><p className="eyebrow">Dubai coverage dashboard</p><h1>Supported urban cells, not an invented blanket.</h1></div><div className="explorer-solar"><SolarTimeline hour={hour} onChange={setHour} /></div></div><div className="dash-summary"><div className="dash-summary-metric"><span className="data-label">Mapped-area mean</span><strong>{ready ? Math.round(mean) : '—'}</strong><span className="mono">/100 potential</span></div><div className="dash-summary-metric"><span className="data-label">Supported cells</span><strong>{model?.metadata.coverage.observedCells.toLocaleString() ?? '—'}</strong><span className="mono">{model?.grid.cellSizeM ?? 750} m source grid</span></div><div className="dash-summary-metric"><span className="data-label">Coverage rule</span><strong className="dash-name">No extrapolation</strong><span className="mono">outside OSM-supported cells</span></div></div></header><div className="container dash-body"><div className="dash-grid">{cards.map((card) => <AreaCard key={card.name} name={card.name} value={card.value} />)}</div><aside className="dash-campus"><p className="eyebrow">Campus data status</p><h2>Not enough source data for a campus heat claim.</h2><p className="dash-campus-lede">THERMO can show the shared field around a school, but this build has no verified campus boundary, tree canopy, shade or sensor feed. It therefore does not invent zone scores.</p><Link className="btn btn-ghost btn-md" to="/about#limits">Read limitations →</Link></aside><ProvenanceNote kind="DERIVED" className="dash-provenance" /></div></div>;
 }
-
-function DistrictCard({ d }: { d: DistrictStats }) {
-  const col = bandColor(d.band);
-  return (
-    <article className="dash-card">
-      <div className="dash-card-top">
-        <span className="dash-dot" style={{ background: col }} aria-hidden="true" />
-        <h2>{d.name}</h2>
-        <span className="mono dash-band">{d.bandName}</span>
-      </div>
-      <div className="dash-heat">
-        <strong>{d.heatIndex}</strong><span className="mono">/100</span>
-      </div>
-      <dl className="dash-meta">
-        <div><dt>Surface temp</dt><dd>{d.surfaceTemp}°C <span className="sim-label">modelled</span></dd></div>
-        <div><dt>Vegetation</dt><dd>{Math.round(d.vegetation * 100)}%</dd></div>
-        <div><dt>Shade potential</dt><dd>{d.shadePotential}%</dd></div>
-        <div><dt>Built density</dt><dd>{Math.round(d.buildingDensity * 100)}%</dd></div>
-      </dl>
-      <p className="dash-intervention">{d.intervention}</p>
-    </article>
-  );
-}
+function AreaCard({ name, value }: { name: string; value: number | null }) { const band = value === null ? null : heatBand(value); return <article className="dash-card"><div className="dash-card-top"><span className="dash-dot" style={{ background: band === null ? '#8a8f86' : bandColor(band) }} aria-hidden="true" /><h2>{name}</h2><span className="mono dash-band">{band === null ? 'No support' : bandLabel(band)}</span></div><div className="dash-heat"><strong>{value === null ? '—' : Math.round(value)}</strong><span className="mono">/100</span></div><p className="dash-intervention">{value === null ? 'No OSM-supported cell at this reference point; no value is rendered.' : 'Modelled potential from the same OSM-derived field used in Explorer, Simulation and Routing.'}</p></article>; }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { Wordmark } from '../ui/Wordmark';
 
 const ITEMS = [
@@ -12,11 +12,6 @@ const ITEMS = [
 
 export function Nav() {
   const [open, setOpen] = useState(false);
-  const location = useLocation();
-
-  useEffect(() => {
-    setOpen(false);
-  }, [location.pathname]);
 
   return (
     <header className="nav">
@@ -27,6 +22,7 @@ export function Nav() {
             <NavLink
               key={i.to}
               to={i.to}
+              onClick={() => setOpen(false)}
               className={({ isActive }) => (isActive ? 'nav-link is-active' : 'nav-link')}
             >
               {i.label}

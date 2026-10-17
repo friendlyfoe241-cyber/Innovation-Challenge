@@ -1,44 +1,18 @@
-/**
- * THERMO data catalog.
- *
- * Imports the bundled datasets and exposes their provenance so the UI
- * can always show where every number comes from.
- *
- * Three categories are acknowledged everywhere:
- *   OBSERVED   – obtained from a documented public source (OSM/Overpass)
- *   DERIVED    – computed from observed data with documented formulas
- *   SIMULATED  – generated purely to demonstrate capabilities
- */
-import type { Graph, HeatGrid, LayerBundle } from '../types/domain';
-import tilesRaw from './dubai/tiles.json';
+import type { SpatialModel } from '../types/domain';
 
-/** Bundled heat grid (small, used by the landing + explorer grids). */
-export const tiles = tilesRaw as HeatGrid;
+/** Static artefacts generated from the documented OSM + HDX source snapshot. */
+let spatialModelPromise: Promise<SpatialModel> | null = null;
 
-/**
- * The OSM layer geometries and route graph are heavy (≈ 9 MB combined), so
- * they are served from `public/data/` and fetched lazily the first time a
- * page needs them. This keeps the initial JS bundle small.
- */
-let layersPromise: Promise<LayerBundle> | null = null;
-let graphPromise: Promise<Graph> | null = null;
-
-export function fetchLayers(): Promise<LayerBundle> {
-  if (!layersPromise) {
-    layersPromise = fetch(import.meta.env.BASE_URL + 'data/layers.json')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`layers fetch failed: ${r.status}`))))
-      .then((d) => d as LayerBundle);
-  }
-  return layersPromise;
+function staticData(path: string) {
+  return fetch(import.meta.env.BASE_URL + path).then((r) => {
+    if (!r.ok) throw new Error(`Spatial data request failed (${r.status})`);
+    return r.json();
+  });
 }
 
-export function fetchGraph(): Promise<Graph> {
-  if (!graphPromise) {
-    graphPromise = fetch(import.meta.env.BASE_URL + 'data/graph.json')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`graph fetch failed: ${r.status}`))))
-      .then((d) => d as Graph);
-  }
-  return graphPromise;
+export function fetchSpatialModel(): Promise<SpatialModel> {
+  if (!spatialModelPromise) spatialModelPromise = staticData('data/dubai-spatial-model.json') as Promise<SpatialModel>;
+  return spatialModelPromise;
 }
 
 export interface DatasetMeta {
@@ -53,102 +27,51 @@ export interface DatasetMeta {
   description: string;
 }
 
-/**
- * Metadata for the currently bundled demonstration datasets.
- * The full source list and retrieval scripts live in
- * scripts/data — see README / the About page.
- */
 export const DATASETS: DatasetMeta[] = [
   {
-    id: 'osm-buildings',
-    name: 'OpenStreetMap building footprints',
-    source: 'OpenStreetMap contributors (Overpass API)',
+    id: 'osm-snapshot',
+    name: 'OpenStreetMap Dubai urban geometry & access tags',
+    source: 'OpenStreetMap contributors via Geofabrik GCC states extract',
     category: 'OBSERVED',
-    resolution: '~m-level footprint geometry',
-    accessDate: '2026-10-08',
+    resolution: 'mapped feature geometry; completeness varies by area',
+    accessDate: '2026-10-15',
     license: 'ODbL 1.0',
     url: 'https://www.openstreetmap.org/copyright',
-    description: 'Building footprint polygons within the Dubai demo corridor (approx. 44 km²).',
+    description: 'Buildings, highways, pedestrian/cycle access tags, vegetation, water, runways, bare land and named places from a fixed OSM snapshot.',
   },
   {
-    id: 'osm-roads',
-    name: 'OpenStreetMap road & path network',
-    source: 'OpenStreetMap contributors (Overpass API)',
+    id: 'hdx-boundary',
+    name: 'Dubai Emirate administrative boundary',
+    source: 'HDX/OCHA COD-AB UAE admin-1 v01 (Dubai AE02)',
     category: 'OBSERVED',
-    resolution: '~m-level line geometry',
-    accessDate: '2026-10-08',
-    license: 'ODbL 1.0',
-    url: 'https://www.openstreetmap.org/copyright',
-    description: 'Highways, pedestrian paths, cycleways and service streets used for the route graph.',
+    resolution: 'administrative polygon',
+    accessDate: '2026-10-16',
+    license: 'CC BY-IGO',
+    url: 'https://data.humdata.org/dataset/cod-ab-are',
+    description: 'Verified Dubai Emirate boundary used to constrain the supported urban analysis window and prevent extension into other emirates.',
   },
   {
-    id: 'osm-green',
-    name: 'OpenStreetMap green space & vegetation',
-    source: 'OpenStreetMap contributors (Overpass API)',
-    category: 'OBSERVED',
-    resolution: 'polygon level',
-    accessDate: '2026-10-08',
-    license: 'ODbL 1.0',
-    url: 'https://www.openstreetmap.org/copyright',
-    description: 'Parks, gardens, grass, trees and natural areas extracted by landuse/leisure/natural tags.',
-  },
-  {
-    id: 'osm-pois',
-    name: 'OpenStreetMap points of interest',
-    source: 'OpenStreetMap contributors (Overpass API)',
-    category: 'OBSERVED',
-    resolution: 'node level',
-    accessDate: '2026-10-08',
-    license: 'ODbL 1.0',
-    url: 'https://www.openstreetmap.org/copyright',
-    description: 'Amenities, shops, hotels and other POIs for activity-density weighting.',
-  },
-  {
-    id: 'osm-schools',
-    name: 'OpenStreetMap school locations',
-    source: 'OpenStreetMap contributors (Overpass API)',
-    category: 'OBSERVED',
-    resolution: 'node/polygon level',
-    accessDate: '2026-10-08',
-    license: 'ODbL 1.0',
-    url: 'https://www.openstreetmap.org/copyright',
-    description: 'School and kindergarten locations in the corridor (for the campus use case).',
-  },
-  {
-    id: 'thermo-tiles',
-    name: 'THERMO urban geometry grid',
-    source: 'DERIVED from the OSM layers above',
+    id: 'thermo-spatial',
+    name: 'THERMO spatial field & land-cover masks',
+    source: 'Derived from the fixed OSM snapshot and HDX/OCHA boundary above',
     category: 'DERIVED',
-    resolution: '≈ 250 m × 250 m tiles',
-    accessDate: '2026-10-08',
-    license: '—',
-    url: '#methodology',
-    description:
-      'Per-tile statistics of building cover, pavement proxy, vegetation, water, POI density and mean height. Computed by scripts/data/process.mjs on the OSM extracts.',
+    resolution: '750 m analysis cells',
+    accessDate: '2026-10-16',
+    license: 'ODbL-derived data; see source attribution',
+    url: '#model',
+    description: 'Shared cells record OSM-supported building, road, vegetation, water, runway and bare-land fractions. Unsupported cells are intentionally absent.',
   },
   {
-    id: 'thermo-graph',
-    name: 'THERMO walkable graph',
-    source: 'DERIVED from the OSM road & path network',
+    id: 'thermo-routing',
+    name: 'Valhalla pedestrian/cycle OSM routing network',
+    source: 'valhalla1.openstreetmap.de public OSM routing service',
     category: 'DERIVED',
-    resolution: 'edge level',
-    accessDate: '2026-10-08',
-    license: '—',
-    url: '#methodology',
-    description: 'Simplified walkable graph with distances between road/path junctions.',
+    resolution: 'OSM network edge level; live provider response',
+    accessDate: '2026-10-16',
+    license: 'Provider availability is best-effort; underlying network is OSM-derived',
+    url: '#routing',
+    description: 'Routes use Valhalla pedestrian/bicycle costing and OSM access rules. THERMO submits selected modelled high-potential cells as pre-search exclusions because the public provider has no custom thermal edge-weight API.',
   },
 ];
 
-export function datasetById(id: string): DatasetMeta | undefined {
-  return DATASETS.find((d) => d.id === id);
-}
-
-/** Boundaries of the corridor that the bundled data covers. */
-export const DEMO_BOUNDS = {
-  s: 25.155,
-  w: 55.225,
-  n: 25.285,
-  e: 55.335,
-};
-
-export const DEMO_CENTER = { lon: 55.279, lat: 25.203, zoom: 13.5 };
+export const DUBAI_DEFAULT_VIEW = { lat: 25.130, lon: 55.255, zoom: 10.55 };

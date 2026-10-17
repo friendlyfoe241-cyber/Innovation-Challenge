@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button';
 import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion';
-import { timeFactor } from '../lib/heat/heatModel';
+import { daylightFactor } from '../lib/heat/heatModel';
 
 export default function LandingPage() {
   const reduced = usePrefersReducedMotion();
@@ -122,8 +122,8 @@ function Hero() {
             <strong>Dubai, UAE</strong>
           </div>
           <div className="hero-readout">
-            <span className="data-label">Demonstration</span>
-            <strong>Downtown · DIFC · Zabeel</strong>
+            <span className="data-label">Coverage</span>
+            <strong>OSM-supported urban Dubai</strong>
           </div>
           <div className="hero-readout">
             <span className="data-label">Data</span>
@@ -150,16 +150,15 @@ function ProblemSection() {
             eyebrow="The problem"
             title={
               <>
-                A city doesn&rsquo;t have one temperature. It has thousands.
+                A city doesn&rsquo;t have one exposure pattern. It has thousands.
               </>
             }
           />
           <div className="reveal-group">
             <p>
-              Street surfaces, building density, vegetation and shade can push the heat felt in two
-              nearby streets several degrees apart. On a hot Dubai day, the difference between an
-              open car park and a shaded avenue can be the difference between a comfortable walk and
-              an unsafe one.
+              Street surfaces, building density, vegetation and water shape urban thermal exposure.
+              THERMO uses the mapped geometry that supports a location and makes its coverage limits
+              visible instead of filling every district with invented values.
             </p>
             <p>
               Most navigation tools optimise for distance or time. Neither tells you what the sun and
@@ -169,14 +168,14 @@ function ProblemSection() {
         </div>
         <div className="problem-stats reveal-group">
           <div className="stat-tile">
-            <span className="stat-num">10–15 °C</span>
+            <span className="stat-num">750 m</span>
             <span className="stat-cap">
-              Modelled surface temperature can vary within a single district
+              Source-cell resolution; smooth display does not add observations
             </span>
           </div>
           <div className="stat-tile">
-            <span className="stat-num">Shade</span>
-            <span className="stat-cap">Is the most effective street-level intervention</span>
+            <span className="stat-num">Masks</span>
+            <span className="stat-cap">Keep scenarios on eligible mapped surfaces</span>
           </div>
           <div className="stat-tile">
             <span className="stat-num">Real streets</span>
@@ -194,13 +193,8 @@ function ProblemSection() {
 
 function HeatSection() {
   const [hour, setHour] = useState<number>(12);
-  const [probe, setProbe] = useState({ upfield: 0, downfield: 0 });
   const reduced = usePrefersReducedMotion();
-
-  useEffect(() => {
-    const f = timeFactor(hour);
-    setProbe({ upfield: Math.round(f * 100), downfield: Math.round(38.6 - (1 - f) * 6.4) });
-  }, [hour]);
+  const daylight = Math.round(daylightFactor(hour) * 100);
 
   return (
     <section className="landing-section heat-showcase">
@@ -223,7 +217,7 @@ function HeatSection() {
         <div className="heat-demo reveal-group">
           <div className="heat-demo-panel">
             <div className={`heat-pulse ${reduced ? '' : 'is-anim'}`}>
-              <span className="data-label">Model · surface heat signature</span>
+              <span className="data-label">Model · relative daylight signature</span>
               <div className="heat-pulse-bars" aria-hidden="true">
                 {Array.from({ length: 42 }, (_, i) => {
                   const amp = 0.35 + 0.65 * Math.abs(Math.sin(i * 1.7 + hour));
@@ -248,12 +242,12 @@ function HeatSection() {
             <SolarTimeline hour={hour} onChange={(h) => setHour(h)} />
             <div className="heat-demo-readouts">
               <div>
-                <span className="data-label">Modelled peak exposure</span>
-                <strong className={probe.upfield > 70 ? 'is-hot' : ''}>{probe.upfield}/100</strong>
+                <span className="data-label">Daylight factor</span>
+                <strong className={daylight > 70 ? 'is-hot' : ''}>{daylight}/100</strong>
               </div>
               <div>
-                <span className="data-label">Normative air temp (model)</span>
-                <strong>{probe.downfield} °C</strong>
+                <span className="data-label">Field resolution</span>
+                <strong>750 m</strong>
               </div>
             </div>
             <ProvenanceNote kind="SIMULATED" />
@@ -277,8 +271,8 @@ function RouteSection() {
           />
           <div className="reveal-group">
             <p>
-              From Dubai Mall to DIFC at 2:30 PM, the fastest route follows open plazas and exposed
-              service roads. A route barely longer stays in shade and alongside vegetation.
+              THERMO requests real walk/cycle paths from an OSM network. The heat-aware options make
+              selected high-potential source cells unavailable before the network search begins.
             </p>
             <p>
               THERMO shows you the trade-off — time, distance and heat exposure — instead of picking
@@ -292,7 +286,7 @@ function RouteSection() {
         <div className="route-demo reveal-group">
           <div className="route-card">
             <div className="route-card-head">
-              <span className="data-label">Dubai Mall → DIFC · 14:30</span>
+              <span className="data-label">Live OSM route search</span>
               <span className="prov-tag" data-prov="DERIVED">
                 Derived
               </span>
@@ -301,32 +295,32 @@ function RouteSection() {
               <li className="route-item route-item-fast">
                 <div className="route-meta">
                   <strong>Fastest</strong>
-                  <span>12 min · 1.0 km</span>
+                  <span>no thermal exclusion</span>
                 </div>
                 <div className="route-bar">
                   <span className="bar-fill" style={{ width: '88%' }} />
                 </div>
-                <span className="route-heat is-high">High exposure</span>
+                <span className="route-heat is-high">Travel-time baseline</span>
               </li>
               <li className="route-item route-item-bal">
                 <div className="route-meta">
                   <strong>Balanced</strong>
-                  <span>14 min · 1.1 km</span>
+                  <span>very-high cells avoided</span>
                 </div>
                 <div className="route-bar">
                   <span className="bar-fill" style={{ width: '55%' }} />
                 </div>
-                <span className="route-heat is-mid">Moderate exposure</span>
+                <span className="route-heat is-mid">Pre-search constraint</span>
               </li>
               <li className="route-item route-item-cool route-recommended">
                 <div className="route-meta">
-                  <strong>Cooler</strong>
-                  <span>17 min · 1.3 km</span>
+                  <strong>Coolest</strong>
+                  <span>high cells avoided</span>
                 </div>
                 <div className="route-bar">
                   <span className="bar-fill" style={{ width: '24%' }} />
                 </div>
-                <span className="route-heat is-low">Low exposure</span>
+                <span className="route-heat is-low">Guardrails on detours</span>
               </li>
             </ul>
           </div>
@@ -344,7 +338,7 @@ function ChangeSection() {
       <div className="container">
         <SectionHeading
           eyebrow="Change the city"
-          title={<>What happens when the city gets more shade?</>}
+          title={<>What changes on eligible surfaces?</>}
           align="center"
           intro={
             <>
@@ -358,30 +352,30 @@ function ChangeSection() {
         <div className="sim-demo reveal-group">
           <div className="sim-demo-stack">
             <div className="sim-current">
-              <span className="data-label">Baseline · exposed plaza</span>
-              <div className="sim-heatnum is-mid">78</div>
+              <span className="data-label">Baseline · shared source field</span>
+              <div className="sim-heatnum is-mid">BASE</div>
               <div className="sim-heatbar">
-                <span style={{ width: '78%' }} />
+                <span style={{ width: '72%' }} />
               </div>
             </div>
             <div className="sim-arrow" aria-hidden="true">
               {`\u2193`}
             </div>
             <div className="sim-scenario">
-              <span className="data-label">Scenario · +shade · +vegetation</span>
-              <div className="sim-heatnum is-low">61</div>
+              <span className="data-label">Scenario · masked intervention</span>
+              <div className="sim-heatnum is-low">SIM</div>
               <div className="sim-heatbar">
-                <span style={{ width: '61%' }} />
+                <span style={{ width: '49%' }} />
               </div>
             </div>
           </div>
           <div className="sim-demo-copy">
             <div className="sim-delta">
-              <span className="data-label">Modelled improvement</span>
-              <strong>−22%</strong>
+              <span className="data-label">Modelled difference</span>
+              <strong>Local</strong>
               <p>
-                A modelled scenario, not a measurement. Adding shade structures over the walkways and
-                tree cover across open ground reduces the prototype heat index.
+                A scenario, not a measurement: vegetation, walkway shade, cool surfaces and depaving
+                operate only where the OSM-supported land-cover masks allow them.
               </p>
               <ProvenanceNote kind="SIMULATED" />
               <Button to="/simulate" variant="ghost" className="sim-cta">

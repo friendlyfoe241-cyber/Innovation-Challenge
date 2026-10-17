@@ -1,279 +1,105 @@
 /**
- * THERMO route planning on the derived walkable graph.
+ * Genuine walk/cycle routing through Valhalla's OSM network.
  *
- * Graph (graph.json) is DERIVED from OpenStreetMap road/path data
- * (OBSERVED). Heat exposure along edges is computed by the heat model,
- * which yields an analytical estimate proportional to:
- *   surface temperature + time of day + exposure to direct sun.
- *
- * The route score is a prototype ("estimated environmental heat
- * exposure"), not a physiological heat-risk prediction.
- *
- * The planner runs several weighted shortest paths ("fastest",
- * "balanced", "cooler") to produce alternatives, then scores each one
- * with the same underlying exposure model.
+ * The public provider does not accept arbitrary THERMO edge weights. THERMO
+ * therefore samples the initial real OSM path, then submits a bounded set of
+ * high-potential samples as `exclude_locations` before each follow-on network
+ * search. Valhalla maps those locations to OSM edges and excludes them during
+ * its own pathfinding: alternatives are not post-route re-rankings.
  */
-import type { Graph, GraphNode, HeatTile, LonLat, TimeOfDay } from '../../types/domain';
-import { airTempAtTile, heatIndexFor } from '../heat/heatModel';
-import { METER_PER_DEG_LAT, METER_PER_DEG_LON, distMeters } from '../geo/geo';
-
-export interface RouteSegment {
-  from: GraphNode;
-  to: GraphNode;
-  dist: number;
-  /** fraction of the segment in direct sun (est.) */
-  exposed: number;
-  surfaceTemp: number;
-  heatIndex: number;
-  cls: string;
-}
+import type { LonLat, RouteChoice, RouteMode, SpatialModel } from '../../types/domain';
+import { HIGH_HEAT_THRESHOLD, calculateBaseField, createFieldSampler } from '../heat/heatModel';
 
 export interface RouteResult {
-  /** packed polyline [lon,lat] */
+  id: string;
+  label: RouteChoice;
   geometry: [number, number][];
-  segments: RouteSegment[];
-  /** travel time, minutes */
-  durationMin: number;
   distanceM: number;
-  /** minutes in direct sun */
-  exposedMin: number;
-  /** minutes in shade/protected settings */
-  shadedMin: number;
-  /** route heat score 0..100 (distance-weighted mean edge exposure) */
-  heatScore: number;
+  durationMin: number;
+  averagePotential: number;
+  peakPotential: number;
+  highHeatMin: number;
   cost: number;
-  /** Fastest / Balanced / Cooler classification used by the UI */
-  label: 'Fastest' | 'Balanced' | 'Cooler';
+  thermalRule: string;
 }
+export interface RouteOptions { mode: RouteMode; hour: number; }
 
-export interface RouteOptions {
-  /** 0 = fastest, 1 = coolest */
-  preference: number;
-  hour: TimeOfDay;
-  walkingSpeed: number;
+const VALHALLA_URL = 'https://valhalla1.openstreetmap.de/route';
+interface ProviderTrip { summary?: { length?: number; time?: number }; legs?: Array<{ shape?: string }> }
+interface ProviderResponse { trip?: ProviderTrip; alternates?: Array<{ trip?: ProviderTrip }> }
+
+function decodePolyline6(shape: string): [number, number][] {
+  let index = 0; let lat = 0; let lon = 0; const points: [number, number][] = [];
+  const read = () => { let result = 0; let shift = 0; let byte = 0; do { byte = shape.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20); return result & 1 ? ~(result >> 1) : result >> 1; };
+  while (index < shape.length) { lat += read(); lon += read(); points.push([lon / 1e6, lat / 1e6]); }
+  return points;
 }
+function distanceM(a: LonLat, b: LonLat) { return Math.hypot((a.lon - b.lon) * 100_800, (a.lat - b.lat) * 110_540); }
 
-export const DEFAULT_ROUTE_OPTIONS: RouteOptions = {
-  preference: 0.55,
-  hour: 14,
-  walkingSpeed: 4.9, // km/h warm-day composite (typical urban walking)
-};
-
-/** Canonical unordered edge key. */
-function edgeKey(a: number, b: number): number {
-  const lo = Math.min(a, b);
-  const hi = Math.max(a, b);
-  return lo * 1000000 + hi;
-}
-
-/** Find the graph node nearest a geographic point within maxRadiusM. */
-export function snapNode(graph: Graph, p: LonLat, maxRadiusM = 320): GraphNode | null {
-  let best: GraphNode | null = null;
-  let bestD = maxRadiusM;
-  for (const n of graph.nodes) {
-    const d = Math.hypot((n.lon - p.lon) * METER_PER_DEG_LON, (n.lat - p.lat) * METER_PER_DEG_LAT);
-    if (d < bestD) {
-      bestD = d;
-      best = n;
-    }
+/** Select separated, mapped route points whose shared field value is high. */
+function exclusionLocations(model: SpatialModel, values: Map<number, number>, geometry: [number, number][], from: LonLat, to: LonLat, threshold: number, maximum: number) {
+  const sample = createFieldSampler(model, values);
+  const candidates = geometry.map(([lon, lat]) => ({ lon, lat, value: sample(lon, lat)?.value ?? 0 }))
+    .filter((point) => point.value >= threshold && distanceM(point, from) > 500 && distanceM(point, to) > 500)
+    .sort((a, b) => b.value - a.value);
+  const chosen: Array<{ lon: number; lat: number }> = [];
+  for (const candidate of candidates) {
+    if (chosen.length >= maximum) break;
+    if (chosen.every((point) => distanceM(point, candidate) >= 180)) chosen.push({ lon: candidate.lon, lat: candidate.lat });
   }
-  return best;
+  return chosen;
 }
-
-function unpackPath(parent: Map<number, number>, target: number): number[] {
-  const chain: number[] = [];
-  let cur: number | undefined = target;
-  while (cur !== undefined) {
-    chain.push(cur);
-    cur = parent.get(cur);
-  }
-  chain.reverse();
-  return chain;
-}
-
-/** Tile-lozenge describing an edge midpoint (no per-node OSM heat attrs). */
-function edgeMidTile(e: { mid: [number, number] }): HeatTile {
-  return { lon: e.mid[0], lat: e.mid[1], r: 0, c: 0, b: 0, p: 0, g: 0, wt: 0, pd: 0, h: 0 };
-}
-
-/**
- * Compute the Fastest / Balanced / Cooler alternatives.
- *
- * `tileLookup` maps an edge midpoint to the nearest heat-grid tile so the
- * route weighting reflects the actual urban fabric.
- *
- * The cooler option is not a single uniform weight — after the fastest path
- * is found its edges are penalised so the search must explore a different
- * street combination. This produces genuinely distinct alternatives instead
- * of the same polyline re-scored.
- */
-export function computeRoutes(
-  graph: Graph,
-  from: LonLat,
-  to: LonLat,
-  opts: RouteOptions,
-  tileLookup: (lon: number, lat: number) => HeatTile | null = () => null,
-): RouteResult[] {
-  const hour = opts.hour ?? 14;
-  const a = snapNode(graph, from);
-  const b = snapNode(graph, to);
-  if (!a || !b) return [];
-
-  // ---- precompute per-edge exposure
-  const heatByEdge = new Map<number, number>();
-  const surfByEdge = new Map<number, number>();
-  for (const e of graph.edges) {
-    const mid = edgeMidTile(e);
-    const tile = tileLookup(e.mid[0], e.mid[1]) ?? mid;
-    const hi = heatIndexFor(tile, hour);
-    heatByEdge.set(edgeKey(e.a, e.b), hi);
-    surfByEdge.set(edgeKey(e.a, e.b), airTempAtTile(tile, hour));
-  }
-
-  const SPEED_MPS = opts.walkingSpeed / 3.6;
-
-  // Dijkstra with a custom edge cost; `penalty` multiplies edge weights.
-  const dijk = (
-    costFn: (w: { hi: number; len: number }) => number,
-    penalty: Map<number, number> = new Map(),
-  ): Map<number, number> => {
-    const dist = new Map<number, number>();
-    const parent = new Map<number, number>();
-    const visited = new Set<number>();
-    const pq: Array<[number, number]> = [[0, a.id]];
-    dist.set(a.id, 0);
-    while (pq.length) {
-      pq.sort((x, y) => x[0] - y[0]);
-      const [d, u] = pq.shift()!;
-      if (visited.has(u)) continue;
-      visited.add(u);
-      if (u === b.id) break;
-      for (const e of graph.edges) {
-        let v = -1;
-        if (e.a === u) v = e.b;
-        else if (e.b === u) v = e.a;
-        if (v < 0 || visited.has(v)) continue;
-        const key = edgeKey(e.a, e.b);
-        const hi = heatByEdge.get(key) ?? 40;
-        const w = costFn({ hi, len: e.len }) * (penalty.get(key) ?? 1);
-        const nd = d + w;
-        if (nd < (dist.get(v) ?? Infinity)) {
-          dist.set(v, nd);
-          parent.set(v, u);
-          pq.push([nd, v]);
-        }
-      }
-    }
-    return parent;
+async function requestProvider(from: LonLat, to: LonLat, mode: RouteMode, excluded: Array<{ lon: number; lat: number }>) {
+  const payload: Record<string, unknown> = {
+    locations: [{ lat: from.lat, lon: from.lon }, { lat: to.lat, lon: to.lon }],
+    costing: mode === 'walk' ? 'pedestrian' : 'bicycle', units: 'kilometers', alternates: 2, language: 'en-US',
   };
-
-  const pref = Math.min(1, Math.max(0, opts.preference));
-
-  const trace = (parent: Map<number, number>): RouteResult | null => {
-    const chain = unpackPath(parent, b.id);
-    if (chain.length < 2) return null;
-    const segs: RouteSegment[] = [];
-    let distanceM = 0;
-    let cost = 0;
-    for (let i = 0; i < chain.length - 1; i++) {
-      const n0 = graph.nodes[chain[i]];
-      const n1 = graph.nodes[chain[i + 1]];
-      const key = edgeKey(n0.id, n1.id);
-      const d = distMeters(n0, n1);
-      const hi = heatByEdge.get(key) ?? 40;
-      const st = surfByEdge.get(key) ?? 38;
-      const exposed = Math.min(0.96, Math.max(0.15, 0.26 + (hi / 100) * 0.6));
-      const cls = '';
-      segs.push({ from: n0, to: n1, dist: d, exposed, surfaceTemp: st, heatIndex: hi, cls });
-      distanceM += d;
-      cost += d * hi;
-    }
-    if (distanceM < 12) return null;
-    const durationMin = distanceM / SPEED_MPS / 60;
-    const exposedMin = segs.reduce((s, g) => s + g.dist * g.exposed, 0) / SPEED_MPS / 60;
-    return {
-      geometry: chain.map((id) => [graph.nodes[id].lon, graph.nodes[id].lat] as [number, number]),
-      segments: segs,
-      durationMin,
-      distanceM,
-      exposedMin,
-      shadedMin: Math.max(0, durationMin - exposedMin),
-      heatScore: Math.round(cost / distanceM),
-      cost: cost / distanceM,
-      label: 'Balanced',
-    };
-  };
-
-  const routes: RouteResult[] = [];
-
-  // 1) Fastest — distance only.
-  const parentFast = dijk(({ len }) => len);
-  const fast = trace(parentFast);
-  if (fast) {
-    routes.push(fast);
-    // 2) Balanced: distance + real exposure blend, penalise the fastest path.
-    const pen1 = new Map<number, number>();
-    for (let i = 0; i < fast.geometry.length - 1; i++) {
-      const k = edgeKey(fast.segments[i].from.id, fast.segments[i].to.id);
-      pen1.set(k, 2.4);
-    }
-    const bal = trace(
-      dijk(({ hi, len }) => len * (1 - 0.45 * pref + (hi / 100) * 1.35 * pref), pen1),
-    );
-    if (bal) routes.push(bal);
+  if (excluded.length) payload.exclude_locations = excluded.map(({ lon, lat }) => ({ lon, lat }));
+  const url = `${VALHALLA_URL}?${new URLSearchParams({ json: JSON.stringify(payload) })}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Routing provider returned ${response.status}`);
+  const body = await response.json() as ProviderResponse;
+  return [body.trip, ...(body.alternates ?? []).map((item) => item.trip)].filter((trip): trip is ProviderTrip => Boolean(trip?.legs?.[0]?.shape));
+}
+function metrics(model: SpatialModel, values: Map<number, number>, trip: ProviderTrip, label: RouteChoice, thermalRule: string): RouteResult | null {
+  const geometry = decodePolyline6(trip.legs?.[0]?.shape ?? ''); if (geometry.length < 2) return null;
+  const sample = createFieldSampler(model, values); let total = 0; let weighted = 0; let high = 0; let peak = 0;
+  for (let i = 1; i < geometry.length; i++) {
+    const a = { lon: geometry[i - 1][0], lat: geometry[i - 1][1] }; const b = { lon: geometry[i][0], lat: geometry[i][1] }; const distance = distanceM(a, b);
+    const potential = sample((a.lon + b.lon) / 2, (a.lat + b.lat) / 2)?.value ?? 55;
+    total += distance; weighted += potential * distance; if (potential >= HIGH_HEAT_THRESHOLD) high += distance; peak = Math.max(peak, potential);
   }
-  // 3) Cooler: strong exposure weight on top of penalties from both paths.
-  const pen2 = new Map<number, number>();
-  for (const r of routes) {
-    for (const s of r.segments) {
-      const k = edgeKey(s.from.id, s.to.id);
-      pen2.set(k, 3.6);
-    }
-  }
-  const cool = trace(dijk(({ hi, len }) => len * (0.22 + (hi / 100) * 2.0), pen2));
-  if (cool) routes.push(cool);
-
-  // Deduplicate by full geometry signature.
-  const seen = new Set<string>();
-  const unique = routes.filter((r) => {
-    const sig = r.geometry.map((p) => p.map((v) => v.toFixed(5)).join(',')).join('|');
-    if (seen.has(sig)) return false;
-    seen.add(sig);
-    return true;
-  });
-
-  // Classify by measured time & heat, then present Fastest first and keep
-  // the genuine low-heat alternative visible as "Cooler".
-  let fastest = unique[0];
-  let coolest = unique[0];
-  for (const r of unique) {
-    if (r.durationMin < fastest.durationMin) fastest = r;
-    if (r.heatScore < coolest.heatScore) coolest = r;
-  }
-  for (const r of unique) {
-    if (r === fastest) r.label = 'Fastest';
-    else if (r === coolest) r.label = 'Cooler';
-    else r.label = 'Balanced';
-  }
-  unique.sort((a, b) => {
-    if (a === fastest) return -1;
-    if (b === fastest) return 1;
-    return a.durationMin - b.durationMin;
-  });
-  return unique;
+  const reportedM = (trip.summary?.length ?? total / 1000) * 1000; const durationMin = (trip.summary?.time ?? (reportedM / 1.25)) / 60;
+  return { id: label.toLowerCase(), label, geometry, distanceM: reportedM, durationMin, averagePotential: Math.round(weighted / Math.max(1, total)), peakPotential: Math.round(peak), highHeatMin: Math.round(durationMin * high / Math.max(1, total) * 10) / 10, cost: durationMin, thermalRule };
+}
+function signature(route: RouteResult) { const stride = Math.max(1, Math.floor(route.geometry.length / 30)); return route.geometry.filter((_, index) => index % stride === 0).map(([lon, lat]) => `${lon.toFixed(4)},${lat.toFixed(4)}`).join('|'); }
+function improvesExposure(route: RouteResult, fastest: RouteResult) {
+  return route.averagePotential < fastest.averagePotential || route.peakPotential < fastest.peakPotential || route.highHeatMin < fastest.highHeatMin;
 }
 
-/** Human-readable tagline for a route in the result list. */
-export function routeTagline(route: RouteResult): string {
-  if (route.label === 'Fastest') return 'Fastest option';
-  if (route.label === 'Cooler') return 'Recommended for lower heat exposure';
-  return 'Best balance between time and heat exposure';
+export async function computeRoutes(model: SpatialModel, from: LonLat, to: LonLat, options: RouteOptions): Promise<RouteResult[]> {
+  const values = calculateBaseField(model, options.hour);
+  const fastTrips = await requestProvider(from, to, options.mode, []);
+  const fastest = fastTrips.map((trip) => metrics(model, values, trip, 'Fastest', 'No thermal exclusion; provider minimises travel cost.')).find((route): route is RouteResult => Boolean(route));
+  if (!fastest) return [];
+  const result: RouteResult[] = [fastest]; const seen = new Set([signature(fastest)]);
+  const profiles: Array<{ label: Exclude<RouteChoice, 'Fastest'>; threshold: number; maximum: number; rule: string }> = [
+    { label: 'Balanced', threshold: 77, maximum: 3, rule: 'Provider excludes up to 3 very-high-potential OSM edges sampled on the fastest path before a new search.' },
+    { label: 'Coolest', threshold: 72, maximum: 4, rule: 'Provider excludes up to 4 high-potential OSM edges sampled on the fastest path before a new search.' },
+  ];
+  for (const profile of profiles) {
+    const exclusions = exclusionLocations(model, values, fastest.geometry, from, to, profile.threshold, profile.maximum);
+    if (!exclusions.length) continue;
+    try {
+      const trips = await requestProvider(from, to, options.mode, exclusions);
+      const valid = trips.map((trip) => metrics(model, values, trip, profile.label, profile.rule)).filter((route): route is RouteResult => Boolean(route))
+        .find((route) => route.durationMin <= fastest.durationMin * 1.5 && route.distanceM <= fastest.distanceM * 1.45 && (profile.label === 'Coolest' ? route.averagePotential < fastest.averagePotential : improvesExposure(route, fastest)) && !seen.has(signature(route)));
+      if (valid) { seen.add(signature(valid)); result.push(valid); }
+    } catch { /* A constrained route may have no feasible network path. Keep valid prior routes. */ }
+  }
+  return result;
 }
 
-export function fmtMin(m: number): string {
-  return `${Math.max(1, Math.round(m))} min`;
-}
-
-export function fmtKm(m: number): string {
-  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`;
-}
+export const fmtMin = (minutes: number) => `${Math.max(1, Math.round(minutes))} min`;
+export const fmtKm = (meters: number) => meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
+export function routeTagline(route: RouteResult) { return route.thermalRule; }

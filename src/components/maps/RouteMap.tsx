@@ -1,69 +1,40 @@
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMapEvents } from 'react-leaflet';
+import { useEffect } from 'react';
+import { CircleMarker, MapContainer, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import type { LatLng } from 'leaflet';
+import type { LonLat, SpatialModel } from '../../types/domain';
+import type { RouteResult } from '../../lib/routing/routeEngine';
+import { DUBAI_DEFAULT_VIEW } from '../../data/datasets';
+import { ThermalFieldLayer } from './ThermalFieldLayer';
+import { calculateBaseField } from '../../lib/heat/heatModel';
 
-export interface PickedRoute {
-  geometry: [number, number][];
-  id: string;
-  heatScore: number;
-  selected: boolean;
+function MapPick({ onMapClick }: { onMapClick: (p: LonLat) => void }) {
+  useMapEvents({ click(e: { latlng: LatLng }) { onMapClick({ lon: e.latlng.lng, lat: e.latlng.lat }); } }); return null;
 }
-
-/** Picks a point on the map and reports it for origin/destination editing. */
-function MapPick({ onMapClick }: { onMapClick: (p: { lon: number; lat: number }) => void }) {
-  useMapEvents({
-    click(e: { latlng: LatLng }) {
-      onMapClick({ lon: e.latlng.lng, lat: e.latlng.lat });
-    },
-  });
+function FitRoutes({ routes }: { routes: RouteResult[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const points = routes.flatMap((route) => route.geometry.map(([lon, lat]) => [lat, lon] as [number, number]));
+    if (points.length > 1) map.fitBounds(points, { padding: [54, 54], maxZoom: 15, animate: true });
+  }, [map, routes]);
   return null;
 }
+const colors = { Fastest: '#d97a1e', Balanced: '#6d8c68', Coolest: '#2f7f9e' } as const;
 
-export function RouteMap({
-  routes,
-  origin,
-  destination,
-  onMapClick,
-}: {
-  routes: PickedRoute[];
-  origin: { lon: number; lat: number } | null;
-  destination: { lon: number; lat: number } | null;
-  onMapClick: (p: { lon: number; lat: number }) => void;
+export function RouteMap({ model, hour, routes, origin, destination, activeId, onSelect, onMapClick }: {
+  model: SpatialModel; hour: number; routes: RouteResult[]; origin: LonLat | null; destination: LonLat | null; activeId: string | null; onSelect: (id: string) => void; onMapClick: (p: LonLat) => void;
 }) {
-  return (
-    <div className="route-map-wrap">
-      <MapContainer center={[25.203, 55.279]} zoom={13.2} className="thermo-map" zoomControl={false} maxZoom={18}>
-        <TileLayer
-          url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
-        />
-        {/* faint heat backdrop intentionally omitted for route clarity */}
-        {routes
-          .filter((r) => r.selected)
-          .map((r) => (
-            <Polyline
-              key={r.id}
-              positions={r.geometry as [number, number][]}
-              pathOptions={{
-                color: '#d97a1e',
-                weight: 5,
-                opacity: 0.95,
-              }}
-            />
-          ))}
-        {routes
-          .filter((r) => !r.selected)
-          .map((r) => (
-            <Polyline key={r.id} positions={r.geometry as [number, number][]} pathOptions={{ color: '#8a9a5b', weight: 3, opacity: 0.5, dashArray: '2 6' }} />
-          ))}
-        {origin && <CircleMarker center={[origin.lat, origin.lon]} radius={8} pathOptions={{ color: '#fff', weight: 2, fillColor: '#2f7f9e', fillOpacity: 1 }} />}
-        {destination && <CircleMarker center={[destination.lat, destination.lon]} radius={8} pathOptions={{ color: '#fff', weight: 2, fillColor: '#d97a1e', fillOpacity: 1 }} />}
-        <MapPick onMapClick={onMapClick} />
-      </MapContainer>
-      {routes.length === 0 && (
-        <div className="route-map-hint">
-          <span className="data-label">Pick two points to find a cooler way</span>
-        </div>
-      )}
-    </div>
-  );
+  const values = calculateBaseField(model, hour);
+  return <div className="route-map-wrap continuous-map-wrap">
+    <MapContainer center={[DUBAI_DEFAULT_VIEW.lat, DUBAI_DEFAULT_VIEW.lon]} zoom={DUBAI_DEFAULT_VIEW.zoom} className="thermo-map" zoomControl={false} maxZoom={18} minZoom={9} attributionControl>
+      <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors' maxZoom={18} />
+      <ThermalFieldLayer model={model} values={values} opacity={0.32} contours />
+      {routes.map((route) => <Polyline key={route.id} positions={route.geometry.map(([lon, lat]) => [lat, lon] as [number, number])} eventHandlers={{ click: () => onSelect(route.id) }} pathOptions={{ color: colors[route.label], weight: route.id === activeId ? 6 : 3.5, opacity: route.id === activeId ? 1 : 0.7, dashArray: route.id === activeId ? undefined : '4 6' }}><Tooltip sticky>{route.label} · {Math.round(route.averagePotential)} potential</Tooltip></Polyline>)}
+      {origin && <CircleMarker center={[origin.lat, origin.lon]} radius={9} pathOptions={{ color: '#fff', weight: 2, fillColor: '#2f7f9e', fillOpacity: 1 }}><Tooltip permanent direction="top">Start</Tooltip></CircleMarker>}
+      {destination && <CircleMarker center={[destination.lat, destination.lon]} radius={9} pathOptions={{ color: '#fff', weight: 2, fillColor: '#d97a1e', fillOpacity: 1 }}><Tooltip permanent direction="top">End</Tooltip></CircleMarker>}
+      <MapPick onMapClick={onMapClick} />
+      <FitRoutes routes={routes} />
+    </MapContainer>
+    <div className="field-map-note"><span className="data-label">ROUTE COST</span><span>ETA + sampled modelled potential on each OSM edge</span></div>
+    {!routes.length && <div className="route-map-hint"><span className="data-label">Choose start and end from the OSM place search, or click the map to set an end point.</span></div>}
+  </div>;
 }

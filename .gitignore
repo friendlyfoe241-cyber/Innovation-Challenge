@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Reproducible downloads used to generate committed derived artefacts
+data/source/

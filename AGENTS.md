@@ -1,223 +1,122 @@
-# THERMO — Heat-Aware Urban Intelligence Platform
+# THERMO — Dubai Heat-Aware Urban Intelligence
 
-THERMO is a software-first urban heat intelligence product for **Dubai, UAE**. It helps people
-understand urban heat, navigate it more safely (heat-aware routing), and explore how cities could
-reduce it (intervention simulation).
+THERMO is a React + TypeScript + Vite prototype for exploring **modelled thermal exposure**, testing constrained urban interventions, and requesting heat-aware walk/cycle routes in Dubai. It is an innovation prototype, not a weather product, medical heat-risk system, navigation guarantee, or planning approval tool.
 
-Built as a student innovation project for the **GEMS Global Innovation Challenge 2026–27**.
+> Product loop: **Observe → Navigate → Improve**. Brand language: warm sunlight, asphalt, shade, maps, environmental data and calm engineering. Avoid synthetic “AI” styling and claims of false precision.
 
-> Brand language: warm sunlight + asphalt + shade + maps + environmental data + calm engineering.
-> NOT: orange gradients + glowing AI blobs + sci-fi neon. No "AI chatbot", no generic SaaS.
+## Routes
 
-## Product concept
+| Path | Purpose |
+| --- | --- |
+| `/` | Product story and entry points |
+| `/explore` | Continuous modelled thermal-potential field with coverage limits |
+| `/route` | Searchable walk/cycle routing with live OSM network geometry |
+| `/simulate` | Land-cover-aware hypothetical intervention scenarios |
+| `/dashboard` | Data-supported district reference points and coverage status |
+| `/about` | Sources, method, provider behavior and limitations |
 
-Three user groups, one product:
+`public/manus-routes.json` mirrors this manifest. `vercel.json` provides the SPA rewrite required for direct Vercel route loads.
 
-1. **Individuals** — pick a route that minimizes heat exposure ("Dubai Mall → DIFC at 14:30").
-2. **Schools / organisations** — campus heat overview (outdoor areas, bus pickup, sports zones).
-3. **Urban planners / researchers** — identify where shade/vegetation interventions matter most.
+## Stack & architecture
 
-Core loop: **Observe → Navigate → Improve**.
+- React 19, TypeScript, Vite 8, React Router, Leaflet/react-leaflet.
+- GSAP/Lenis are retained for the narrative shell, respecting reduced motion. No new animation should obscure data state.
+- Custom CSS lives in `src/styles/`; no Tailwind.
+- `src/types/domain.ts` defines the shared `SpatialModel`, `SpatialCell`, source metadata and local-search contracts.
+- `src/data/datasets.ts` lazily fetches the static spatial model from `public/data/dubai-spatial-model.json`.
+- `src/lib/heat/heatModel.ts` is the sole thermal-potential function and sampler. Explorer, simulation and route metrics must use it—not independent formulas.
+- `src/lib/simulation/scenarioModel.ts` applies eligibility masks and local spill-over only. It must never use a blanket temperature subtraction or multiplier.
+- `src/lib/routing/routeEngine.ts` requests Valhalla pedestrian/bicycle OSM routing and samples returned real geometry against the shared field.
+- `src/components/maps/ThermalFieldLayer.tsx` draws the smooth canvas raster and contour bands. Its interpolation is display-only and must remain constrained to supported source cells.
 
-## Pages / routes
+## Data integrity: observed, derived, simulated
 
-| Route | Page | Purpose |
+Use exactly these labels in UI and documentation:
+
+- **OBSERVED:** documented source geometry/boundary, including OSM geometry/access tags and HDX/OCHA boundary data.
+- **DERIVED:** the 750 m spatial cells, thermal-potential field, masks, route metric samples and coverage checks.
+- **SIMULATED:** intervention scenarios only.
+
+The thermal value is a **dimensionless 0–100 modelled potential**. It is not air temperature, land-surface temperature, an apparent temperature or health score. Do not reintroduce fabricated °C values, weather curves, shade percentages or sensor claims.
+
+### Source catalogue
+
+| Source | Current use | Snapshot / terms |
 | --- | --- | --- |
-| `/` | LandingPage | Product intro + storytelling (hero → problem → see → move → change → platform → CTA) |
-| `/explore` | ExplorerPage | Urban Heat Explorer (map, time, layers, details) |
-| `/route` | RoutePlannerPage | Heat-aware route planner (alternatives + trade-off) |
-| `/simulate` | SimulatePage | Urban Intervention Simulator (scenario modelling) |
-| `/dashboard` | DashboardPage | District overview dashboard |
-| `/about` | AboutPage | Methodology, data provenance, limitations |
+| OpenStreetMap contributors / Geofabrik GCC extract | Buildings, highways, access, vegetation, water, runways, bare land, named places | OSM snapshot 2026-10-15T20:21:00Z; ODbL 1.0; attribution required |
+| HDX/OCHA COD-AB UAE admin-1 v01 | Dubai Emirate (`AE02`) boundary used to constrain the urban analysis window | valid from 2023-05-15; CC BY-IGO |
+| Valhalla public OSM route endpoint | Real walk/cycle paths with provider access/costing rules | best-effort public service; CORS checked 2026-10-16 |
 
-## Tech stack
+Source URLs and detailed licence/method notes are in `DATA.md` and `/about`.
 
-- React 19 + TypeScript + Vite 8
-- Tailwind is NOT used — custom CSS design system (`src/styles/`)
-- Leaflet + react-leaflet for maps
-- GSAP + Lenis (smooth scroll), respecting `prefers-reduced-motion`
-- No chart library — data visualisations are hand-built CSS bars and instrument readouts (kept the bundle lean)
-- ESM Node scripts under `scripts/data/` for the data pipeline
-- Fonts: Geist (display) + Manrope (body) + IBM Plex Mono (labels) via @fontsource
+## Coverage & field resolution
 
-## Architecture
+`public/data/dubai-spatial-model.json` currently contains **4,414 OSM-supported 750 m cells** in an explicit urban Dubai window (`24.75–25.45 N`, `54.85–55.72 E`) constrained by the verified Dubai boundary. It includes data-supported coverage around Downtown, Deira, Dubai Marina, Mirdif, Al Barsha, Dubai Hills and Dubai South.
 
-```
-src/
-  components/
-    navigation/    Nav, Footer
-    hero/          HeroField (canvas living-map visual)
-    maps/          HeatMap, RouteMap, InterventionMap (Leaflet)
-    ui/            Button, Wordmark, SectionHeading, ThermalScale, Provenance, SolarTimeline, …
-  pages/           LandingPage, ExplorerPage, RoutePlannerPage, SimulatePage, DashboardPage, AboutPage
-  lib/
-    heat/          heatModel.ts (heat exposure index, LST model), districtStats.ts
-    routing/       routeEngine.ts (weighted-journey router on OSM-derived graph)
-    simulation/    scenarioModel.ts (interventions → tile deltas)
-    geo/           geo.ts (distance/coordinate helpers)
-  data/
-    places.ts      curated landmarks/districts/POIs (demonstration coordinates)
-    datasets.ts    data catalog + lazy loaders (fetchLayers / fetchGraph); tiles.json bundled
-    dubai/         tiles.json (bundled heat grid, ~128 KB)
-  hooks/           useSmoothScroll, usePrefersReducedMotion, useData (useLayers/useGraph)
-  public/data/     layers.json + graph.json (~4.6 MB each) served statically, fetched lazily
-  types/           domain.ts
-  styles/          global.css (tokens), components.css (component & page styles)
-```
+Cells without fixed-snapshot OSM support are omitted. The canvas makes those areas transparent: do not stretch, fill, nearest-neighbour copy or visually imply coverage beyond them. Smooth raster display is local bilinear interpolation among supported cells only. Contours at 40/55/70/82 are model bands, not measured isotherms.
 
-Domain logic stays OUT of UI. All models are pure functions over `HeatTile[]` / the route graph.
+## Land-cover-aware simulation
 
-## Data strategy — OBSERVED / DERIVED / SIMULATED
+The fixed OSM snapshot classifies:
 
-Every value shown has a provenance. There are exactly three categories (see §28A of the brief).
+- buildings: `building=*` polygons;
+- roads: `highway=*` line density;
+- vegetation: selected `landuse`, `leisure` and `natural` green tags;
+- water: `natural=water`, `water=*`, basin/reservoir;
+- runways/taxiways: `aeroway=runway|taxiway`;
+- bare/support land: selected bare/natural/construction tags.
 
-- **OBSERVED** — from a documented real dataset. For this prototype: **OpenStreetMap** geometry
-  (buildings, roads, paths, green/water, POIs, schools) fetched from the **Overpass API**
-  (bbox `25.155,55.225,25.285,55.335` — Downtown Dubai / Business Bay / DIFC / Zabeel corridor).
-- **DERIVED** — outputs of THERMO's documented formulas computed from OSM data
-  (heat exposure index, LST estimate, route heat scores, district stats).
-- **SIMULATED** — synthetic values with no measurement basis (e.g. normative air temperature,
-  intervention outcomes, diurnal curve). Always labelled "Simulation / Modelled estimate".
+Eligibility is hard-coded and documented:
 
-**Critical rules:**
-- Land-surface temperature is NOT air temperature. We show **LST estimates** and clearly label
-  them as modelled.
-- The **THERMO Heat Exposure Index** is a *prototype analytical index*, never a health warning.
-- Route scores = **estimated environmental heat exposure**, not physiological risk.
-- Intervention outcomes are **modelled scenarios**, not predictions.
-- Never invent sources or datasets. If a value's provenance is unclear, mark it SIMULATED.
+- vegetation → mapped road-edge or bare-land support only;
+- walkway shade → cells with mapped walk-network support only;
+- cool surfaces → mapped building, road or bare support only;
+- depave → mapped road support only;
+- water and runway cells → excluded from all direct changes and nearby cooling.
 
-## Heat model (`src/lib/heat/heatModel.ts`)
+Vegetation/shade carry-over uses a 1.2 km radius, 620 m Gaussian scale and a 35% maximum source-local influence. It is applied only to supported non-water/non-runway neighbours. Reflective and depaving effects remain local. These coefficients are scenario assumptions, not predictions.
 
-- `tile` fields: normalized fractions `b` (built), `p` (pavement), `g` (green), `wt` (water),
-  `pd` (population/activity index), `h` (mean building height, m).
-- `surfaceTempFor(tile, hour)`: diurnal LST estimate from air temperature + per-surface albedo
-  decomposition + green/water cooling + urban-heat bonus.
-- `heatIndexFor(tile, hour)`: scaled 0–100 prototype exposure index from LST + vegetation deficit +
-  surface albedo + built density + time-of-day stress. Formula documented on `/about`.
-- `heatBand`, `bandLabel`, `bandColor`: 5-step categorical scale (Low / Moderate / Elevated / High /
-  Extreme), designed to be non-colour-dependent (labels & numbers always shown).
-- `airTempAtTile(tile, hour)`: **normative model curve** — labelled simulation.
+## Heat-aware routing
 
-## Route model (`src/lib/routing/routeEngine.ts`)
+Routes must use `walk` or `cycle` mode and a **genuine pedestrian/cycle OSM routing provider**. The UI must draw all returned polylines and start/end markers; cards alone are insufficient. Route metrics supported today are distance, ETA, modelled average potential, modelled peak potential and modelled time above the high-potential threshold. No shade metric is available.
 
-- Dijkstra on the OSM-derived graph (approx 31k nodes / 34k edges) using an edge weight that blends
-  distance (or time) with estimated heat exposure (`heatIndexFor` on the nearest tile at each edge
-  midpoint, via `createTileLookup`).
-- Three alternatives via **edge-penalty re-routing**: the fastest path is found first; the balanced
-  option blends distance + exposure (by the user preference) and is penalised off the fastest path;
-  then a strong exposure-weighted re-run is penalised off both prior paths. Each alternative is a
-  genuinely distinct street combination.
-- Routes are classified by measured time/heat into **Fastest / Balanced / Cooler** labels; the
-  low-heat alternative is tagged "Recommended for lower heat exposure".
-- User preference slider maps to a blend coefficient: left = distance/time, right = exposure.
-- Segment-level breakdowns: distance, duration, heat score, exposed vs shaded/protected time.
-- Always worded "recommended for lower heat exposure" — never "this is the correct route".
+Valhalla does not expose a custom THERMO edge-weight parameter. THERMO uses a documented valid alternative that changes the provider’s path search:
 
-## Simulation model (`src/lib/simulation/scenarioModel.ts`)
+1. create the shared baseline field for the selected hour;
+2. sample the initial real path against that field;
+3. send a bounded set of high-potential matched route locations as `exclude_locations` **before** each provider follow-on network search;
+4. Fastest has no exclusions; Balanced excludes a small very-high set; Coolest excludes a bounded high set;
+5. reject heat-aware paths that exceed the fastest route’s 1.5× time or 1.45× distance guardrails, or do not improve a supported exposure metric (Coolest must reduce mean potential);
+6. sample each accepted real provider geometry against the shared field.
 
-- Sliders (0–50%): vegetation, shade walkways, reflective surfaces, depave (reduce exposed pavement).
-- `applyIntervention` mutates tile properties; `scenarioSummary` returns baseline vs scenario heat
-  index and % improvement. **All results are modelled, not observed.**
+This is categorical thermal avoidance, not continuous calibrated thermal cost. Do not claim otherwise. If the provider cannot find a path, show that limitation instead of inventing a route.
 
-## Data pipeline (Node/ESM in `scripts/data/`)
+## Data build pipeline
 
-- `fetch-overpass.mjs` — queries Overpass API by category with HTTP-500 retry/backoff → `data/raw/*.json`.
-- `process.mjs` — rasterizes OSM features into a tile grid, layer geometries, and a routable
-  street graph. `tiles.json` is written to `src/data/dubai/` (bundled, ~128 KB); `layers.json`
-  and `graph.json` are written to `public/data/` and fetched lazily at runtime.
-- Bundle optimisation: initial JS is ~700 KB (211 KB gzip); heavy vector data loads on demand.
+`data/source/` is ignored: it contains reproducible downloads, never committed raw data.
 
-Run: `npm run fetch:data` then `npm run process:data`.
-Requires Python? No — the whole pipeline is Node/ESM (no shapely/numpy needed).
+1. Download the HDX/OCHA UAE boundary and Geofabrik GCC PBF snapshot.
+2. Use `osmium` to extract the Dubai urban window and selected OSM tags.
+3. Export thematic GeoJSON.
+4. Run `npm run build:data` to create the committed static model and routing-provider metadata.
 
-## Environment / secrets
+See `DATA.md` for exact commands. Do not silently substitute old Downtown raw files, random values or a widened grid when rebuilding.
 
-- No API keys required. Overpass API is public (rate-limited) and map pins use OSM standard tiles.
-- `.env.example` is empty of secrets (see `.env.example`).
-- No secrets are committed.
+## Development & validation
 
-## Dev commands
-
-| Task | Command |
+| Action | Command |
 | --- | --- |
 | Install | `npm install` |
-| Dev server | `npm run dev` |
-| Typecheck | `npx tsc -b` |
-| Build | `npm run build` |
-| Preview build | `npm run preview` |
+| Data build (with source downloads present) | `npm run build:data` |
+| Typecheck + production build | `npm run build` |
 | Lint | `npx oxlint src` |
-| Fetch OSM data | `npm run fetch:data` |
-| Process data | `npm run process:data` |
+| Local preview | `npm run dev -- --host 0.0.0.0` |
 
-## Git workflow
+Before a milestone commit: inspect `git status` and diffs, run relevant build/lint checks, verify direct SPA paths are covered by `vercel.json`, and check Explorer, Simulator and Route flows. Commit meaningful milestones on `main`, then push to `origin/main`; never force-push or overwrite unrelated user work.
 
-- Branch: `main`; remote: `github.com/friendlyfoe241-cyber/Innovation-Challenge`.
-- Commit after every meaningful milestone (feat:/fix:/style:/docs:/perf:), then push.
-- Inspect `git status` / `git log` before changing; never blindly overwrite existing work.
+## Current limitations
 
-## Current implementation status
-
-**Complete:**
-- Data pipeline: Overpass fetch (real OSM: ~26k buildings, 6.7k roads, 5k paths, 1.3k green, 175 water,
-  1.6k POIs, 8 schools) + processing to grid/layers/graph.
-- Provenance docs: README.md, DATA.md, .env.example.
-- Design-system foundation: tokens, typography, Nav/Footer, Button, Wordmark, SectionHeading,
-  ThermalScale legend, Provenance badges, SolarTimeline sun-arc widget.
-- Lenis + GSAP scaffolding (reduced-motion aware) via hooks.
-- Landing page complete (hero canvas field, storytelling sections, CTAs).
-- Urban Heat Explorer page complete: interactive Leaflet map with live OSM base tiles, heat grid
-  (per-tile Heat Exposure Index coloured by band), buildings/vegetation/water/roads/school layers,
-  hour-of-day SolarTimeline control, neighbourhood quick-cards (district stats), thermal scale
-  legend, crosshair + cursor readout, and a click-to-inspect location panel with interpretable
-  "why this score". All heat values labelled DERIVED/SIMULATED.
-
-**Complete (continued)**
-- Route Planner page: map + From/To + departure time + walk/cycle mode + Fastest / Balanced /
-  Cooler alternatives via penalty-based re-routing + preference slider + per-route heat breakdown
-  (exposed vs shaded minutes, heat score). Browser-verified.
-- Bundle/performance fix: `layers.json` + `graph.json` moved out of the JS bundle into
-  `public/data/` and lazy-loaded (`useLayers` / `useGraph`). Initial bundle ~700 KB (211 KB gzip).
-
-**Complete (continued)**
-- Intervention Simulator page: 4 intervention sliders (vegetation, shaded walkways, reflective
-  surfaces, depave), live scenario heat grid on the Leaflet map (baseline fades, scenario overlay
-  re-scores tiles with `heatIndexAfter`), baseline vs scenario Heat Exposure Index, potential
-  improvement %, and a per-intervention impact comparison ("What matters most"). Fixed a shade-sign
-  bug in `scenarioModel.ts` (the shade term was added instead of subtracted) — simulated impacts
-  now cool sensibly. Browser-verified (Vegetation 31.6%, Shade 8.5%, Reflective 6.1%, Depave 6.7%).
-
-**Complete (continued)**
-- Methodology page (/about): problem/approach, 5-step pipeline, data-source catalog with
-  OBSERVED/DERIVED/SIMULATED tags, documented Heat Exposure Index weights (50/8/17/14/11),
-  LST ≠ air-temperature callout, school-mode section, limitations, roadmap, transparency note.
-- Dashboard page: corridor summary, district cards (index, band, modelled LST, vegetation,
-  shade potential, built density, intervention), time-of-day control and a school-mode campus
-  panel (GEMS Wellington) with clearly labelled simulated zones.
-
-**Phase 8 — polish & QA (done)**
-- Removed unused `recharts` dependency (visualisations are hand-built CSS).
-- Production build verified: `dist` 10 MB total; JS bundle 723 KB minified (218 KB gzip);
-  heavy data (`public/data/*.json`) served statically and lazy-fetched. All 6 routes return 200.
-- Browser-verified end-to-end: landing hero + storytelling; explorer tabs; route planner
-  (Fastest 42m/3.5km Heat 77, Cooler 44m/3.6km Heat 73, Balanced 46m/3.8km Heat 77);
-  intervention simulator (Vegetation 31.6%, Shade 8.5%, Reflective 6.1%, Depave 6.7%);
-  dashboard + methodology pages.
-- `prefers-reduced-motion` respected (Lenis/GSAP skipped). Mobile dropdown nav + stacking layouts.
-- Data audit: every number is OBSERVED (OSM), DERIVED (documented model), or SIMULATED (labelled).
-
-**Known limitations**
-- Heat values are DERIVED/SIMULATED — no satellite LST or air-temperature feed yet.
-- Route graph is a demonstration simplification of the street network (footpaths + roads);
-  alternatives are heuristic, not commercial-grade.
-- School mode uses assumed campus footprint (GEMS Wellington coords marked as demonstration).
-- Intervention coefficients are hypotheses drawn from urban-heat literature summaries, clearly
-  labelled as such (see DATA.md).
-
-## Visual system (brief)
-
-- Ink `#232a26` on warm paper `#f6f2ea`; accents amber `#d97a1e` (ember), sun `#f3c77c`.
-- Parchment `#efeadf` surfaces; deep `#161c19` for map/hero depths.
-- Thermal scale: cool `#3f7d78` → mild `#8a9a5b` → warm `#d9a94e` → hot `#d9771f` → extreme `#b4521c`.
-- Typography: Geist display, Manrope body, IBM Plex Mono labels. Uppercase micro-labels strong hierarchy.
-- Motifs: solar arc, heat contours, urban grid, shadow, crosshair readouts. Slow purposeful motion.
+- No satellite LST, weather-station/air-temperature data, humidity, wind, sensors, surveyed canopy or verified shade raster.
+- OSM completeness and access tagging vary; paths are provider results, not a safety/access guarantee.
+- Public Valhalla routing availability is best-effort and its OSM snapshot can differ from the fixed spatial-model snapshot.
+- Thermal potential and all intervention reductions are modelled, not observed or validated outcomes.

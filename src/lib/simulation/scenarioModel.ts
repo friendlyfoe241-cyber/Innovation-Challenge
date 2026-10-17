@@ -1,147 +1,108 @@
 /**
- * THERMO Intervention Simulator model.
+ * Land-cover-aware, spatially local intervention scenarios.
  *
- * All outputs are MODELLED SCENARIOS. The sensitivity coefficients
- * below are transparent prototype assumptions based on published
- * urban-heat literature (street tree shade, albedo treatments,
- * vegetation cooling). They are NOT measured post-intervention
- * temperatures. Every value produced here is DERIVED from the current
- * tile state through these documented coefficients.
+ * These are hypothetical changes to the shared modelled potential, never a
+ * temperature prediction. No operation changes water or runway cells, and no
+ * slider applies a uniform blanket adjustment.
  */
-import type { HeatTile, HeatModelConfig } from '../../types/domain';
-import { heatIndexFor, surfaceTempFor, HEAT_MODEL_DEFAULTS } from '../heat/heatModel';
+import type { SpatialCell, SpatialModel } from '../../types/domain';
+import { calculateBaseField, clamp01 } from '../heat/heatModel';
 
 export interface InterventionSliders {
-  /** 0..1 additional vegetation fraction applied across open ground */
   vegetation: number;
-  /** 0..1 fraction of exposed footways given shade cover */
   shade: number;
-  /** 0..1 fraction of hard surfaces given high-albedo treatment */
   reflective: number;
-  /** 0..1 fraction of exposed pavement replaced by permeable/shaded surface */
   depave: number;
 }
+export const EMPTY_INTERVENTION: InterventionSliders = { vegetation: 0, shade: 0, reflective: 0, depave: 0 };
+export const MAX_SLIDER = 0.5;
 
-export const EMPTY_INTERVENTION: InterventionSliders = {
-  vegetation: 0,
-  shade: 0,
-  reflective: 0,
-  depave: 0,
-};
-
-export const MAX_SLIDER = 0.5; // UI scale cap, e.g. "up to 50%"
-
-/** Coefficients applied to the tile model (documented prototype). */
-const SENSITIVITY = {
-  // per unit vegetation fraction → °C LST reduction
-  vegCool: 9,
-  // per unit shaded footway fraction → °C rider reduction on open ground
-  shadeCool: 7,
-  // per unit reflective fraction → °C reduction via higher albedo
-  reflectCool: 6,
-  // per unit depave → °C reduction on previously exposed ground
-  depaveCool: 8,
-};
-
-/** Apply interventions to a tile, returning a modified copy. */
-export function applyIntervention(tile: HeatTile, sliders: InterventionSliders): HeatTile {
-  const out: HeatTile = { ...tile };
-  const v = Math.min(0.5, sliders.vegetation);
-  const s = Math.min(0.5, sliders.shade);
-  const r = Math.min(0.5, sliders.reflective);
-  const d = Math.min(0.5, sliders.depave);
-
-  // Vegetation is added onto current open ground.
-  const open = Math.max(0, 1 - tile.g - tile.b - tile.wt);
-  out.g = Math.min(0.85, tile.g + v * open);
-
-  // Shaded walkways reduce the direct-sun fraction of open ground.
-  out.p = Math.min(0.92, tile.p * (1 - s * 0.6));
-
-  // Reflectivity lifts the effective albedo so the LST model cools.
-  // We encode this by nudging the albedo term through tile fields:
-  // (paved surfaces become brighter → handled as a thermal offset below)
-  const offset =
-    -s * SENSITIVITY.shadeCool * (1 - Math.min(0.7, tile.g * 1.4)) -
-    r * SENSITIVITY.reflectCool * 0.9 -
-    d * SENSITIVITY.depaveCool * (1 - tile.g) * 0.8 -
-    v * SENSITIVITY.vegCool * open;
-
-  (out as HeatTile & { _offset?: number })._offset = offset;
-  return out;
+export interface InterventionMask {
+  vegetation: number;
+  shade: number;
+  reflective: number;
+  depave: number;
+}
+export interface ScenarioField {
+  baseline: Map<number, number>;
+  scenario: Map<number, number>;
+  difference: Map<number, number>;
+  masks: Map<number, InterventionMask>;
 }
 
-/** Account for the thermal offset inside the surface-temp estimate. */
-export function surfaceTempAfter(tile: HeatTile, hour: number, config: HeatModelConfig = HEAT_MODEL_DEFAULTS): number {
-  const base = surfaceTempFor(tile, hour, config);
-  const off = (tile as HeatTile & { _offset?: number })._offset ?? 0;
-  return Math.round((base + off) * 10) / 10;
-}
+function ineligible(cell: SpatialCell) { return cell.water >= 0.12 || cell.runway >= 0.04; }
 
-export function heatIndexAfter(tile: HeatTile, hour: number, config: HeatModelConfig = HEAT_MODEL_DEFAULTS): number {
-  const base = heatIndexFor(tile, hour, config);
-  const off = (tile as HeatTile & { _offset?: number })._offset ?? 0;
-  return Math.round(Math.min(100, Math.max(0, base + off * 2.4)) * 10) / 10;
-}
-
-export interface ScenarioSummary {
-  baselineIndex: number;
-  scenarioIndex: number;
-  improvementPct: number;
-  components: {
-    vegetation: number;
-    shade: number;
-    reflective: number;
-    depave: number;
-  };
-}
-
-/** Aggregate index for a set of tiles under an intervention. */
-export function scenarioSummary(tiles: HeatTile[], sliders: InterventionSliders, hour: number, weights?: number[]): ScenarioSummary {
-  const n = tiles.length;
-  let baseSum = 0;
-  let scenSum = 0;
-  for (let i = 0; i < n; i++) {
-    const w = weights?.[i] ?? 1;
-    baseSum += heatIndexFor(tiles[i], hour) * w;
-    const mod = applyIntervention(tiles[i], sliders);
-    scenSum += heatIndexAfter(mod, hour) * w;
-  }
-  const baselineIndex = round0(baseSum / n);
-  const scenarioIndex = round0(scenSum / n);
-  const improvementPct =
-    baselineIndex === 0 ? 0 : round0(((baselineIndex - scenarioIndex) / baselineIndex) * 100);
+/** Masks use observed/mapped cover only; they are zero for unsupported uses. */
+export function interventionMask(cell: SpatialCell): InterventionMask {
+  if (ineligible(cell)) return { vegetation: 0, shade: 0, reflective: 0, depave: 0 };
   return {
-    baselineIndex,
-    scenarioIndex,
-    improvementPct,
-    components: {
-      vegetation: sliders.vegetation,
-      shade: sliders.shade,
-      reflective: sliders.reflective,
-      depave: sliders.depave,
-    },
+    // Street planting / bare-land planting only — never direct water/runway cooling.
+    vegetation: clamp01((cell.road * 0.74 + cell.bare * 0.9) * (1 - cell.b * 0.22)),
+    // Shade is limited to cells with mapped walkable network support.
+    shade: clamp01(cell.walk * (1 - cell.g * 0.35)),
+    // Reflective treatment only applies to mapped hard surfaces.
+    reflective: clamp01(cell.b * 0.78 + cell.road * 0.72 + cell.bare * 0.35),
+    // Depaving applies to road/paved support, never runways.
+    depave: clamp01(cell.road * (1 - cell.b * 0.3)),
   };
 }
 
-/** Per-intervention isolated impact (each at 100% of the UI cap). */
-export function isolatedImpacts(tiles: HeatTile[], hour: number): { label: string; impact: number; detail: string }[] {
-  const base = scenarioSummary(tiles, EMPTY_INTERVENTION, hour);
-  const cap: InterventionSliders = { vegetation: 0.35, shade: 0.35, reflective: 0.35, depave: 0.35 };
-  const mk = (label: string, partial: Partial<InterventionSliders>, detail: string) => {
-    const s = { ...EMPTY_INTERVENTION, ...partial };
-    const sc = scenarioSummary(tiles, s, hour);
-    const rel = base.baselineIndex === 0 ? 0 : round0(((base.baselineIndex - sc.scenarioIndex) / base.baselineIndex) * 100);
-    return { label, impact: rel, detail };
+/**
+ * Nearby cooling rule: vegetation and walkway shade may influence supported
+ * neighbouring non-water/non-runway cells within 1.2 km. The influence is
+ * Gaussian in grid distance and capped at 35% of the source-local effect.
+ */
+export function buildScenarioField(model: SpatialModel, hour: number, sliders: InterventionSliders): ScenarioField {
+  const baseline = calculateBaseField(model, hour);
+  const scenario = new Map(baseline);
+  const difference = new Map<number, number>();
+  const masks = new Map<number, InterventionMask>();
+  const cellByKey = new Map(model.cells.map((cell) => [cell.r * model.grid.cols + cell.c, cell]));
+  const localCooling = new Map<number, number>();
+  const carryCooling = new Map<number, number>();
+  const s = {
+    vegetation: Math.min(MAX_SLIDER, sliders.vegetation), shade: Math.min(MAX_SLIDER, sliders.shade),
+    reflective: Math.min(MAX_SLIDER, sliders.reflective), depave: Math.min(MAX_SLIDER, sliders.depave),
   };
-  return [
-    mk('More vegetation', { vegetation: cap.vegetation }, 'Street trees & planted ground across open areas'),
-    mk('Shaded walkways', { shade: cap.shade }, 'Canopies and arcades over exposed footpaths'),
-    mk('Reflective surfaces', { reflective: cap.reflective }, 'High-albedo pavements and roofs'),
-    mk('Less exposed pavement', { depave: cap.depave }, 'Depaving: permeable & planted surfaces'),
-  ];
+
+  for (const cell of model.cells) {
+    const mask = interventionMask(cell); masks.set(cell.id, mask);
+    const vegetation = 18 * s.vegetation * mask.vegetation;
+    const shade = 15 * s.shade * mask.shade;
+    const reflective = 8 * s.reflective * mask.reflective;
+    const depave = 12 * s.depave * mask.depave;
+    const direct = vegetation + shade + reflective + depave;
+    localCooling.set(cell.id, direct);
+    // Only greenery and shade get a local-area spill-over; hard-surface
+    // treatment remains on the eligible source surface.
+    const spill = vegetation + shade;
+    if (spill <= 0.001) continue;
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        if (!dr && !dc) continue;
+        const distance = Math.hypot(dr, dc) * model.grid.cellSizeM;
+        if (distance > 1200) continue;
+        const neighbour = cellByKey.get((cell.r + dr) * model.grid.cols + cell.c + dc);
+        if (!neighbour || ineligible(neighbour)) continue;
+        const weight = 0.35 * Math.exp(-0.5 * (distance / 620) ** 2);
+        carryCooling.set(neighbour.id, (carryCooling.get(neighbour.id) ?? 0) + spill * weight);
+      }
+    }
+  }
+
+  for (const cell of model.cells) {
+    const cool = (localCooling.get(cell.id) ?? 0) + (carryCooling.get(cell.id) ?? 0);
+    const base = baseline.get(cell.id) ?? 0;
+    const next = Math.max(0, base - cool);
+    scenario.set(cell.id, next);
+    difference.set(cell.id, Math.round((next - base) * 10) / 10);
+  }
+  return { baseline, scenario, difference, masks };
 }
 
-function round0(v: number): number {
-  return Math.round(v * 10) / 10;
+export function scenarioSummary(field: ScenarioField) {
+  const values = [...field.baseline.keys()];
+  const base = values.reduce((sum, id) => sum + (field.baseline.get(id) ?? 0), 0) / Math.max(1, values.length);
+  const scenario = values.reduce((sum, id) => sum + (field.scenario.get(id) ?? 0), 0) / Math.max(1, values.length);
+  return { baseline: Math.round(base * 10) / 10, scenario: Math.round(scenario * 10) / 10, reduction: Math.round((base - scenario) * 10) / 10, improvementPct: base ? Math.round(((base - scenario) / base) * 1000) / 10 : 0 };
 }

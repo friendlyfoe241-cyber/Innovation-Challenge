@@ -1,200 +1,36 @@
 import { useMemo, useState } from 'react';
-import { HeatMap, type LayerFlags, type SelectedPoint } from '../components/maps/HeatMap';
+import { HeatMap, type SelectedPoint } from '../components/maps/HeatMap';
 import { ThermalScale } from '../components/ui/ThermalScale';
 import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
-import { DistrictQuickLinks } from '../components/ui/DistrictQuickLinks';
-import { DISTRICTS } from '../data/places';
-import { tileLoadState, useLayers } from '../hooks/useData';
-import { heatIndexFor, surfaceTempFor, airTempAtTile, bandLabel, heatBand, shadePotential } from '../lib/heat/heatModel';
-import { districtStatsFor } from '../lib/heat/districtStats';
-import { type LonLat } from '../types/domain';
-
-const DEFAULT_FLAGS: LayerFlags = {
-  heat: true,
-  vegetation: false,
-  built: true,
-  water: true,
-  roads: false,
-  pois: false,
-  districts: true,
-};
+import { useSpatialModel } from '../hooks/useData';
+import { bandLabel, calculateBaseField, createFieldSampler, heatBand } from '../lib/heat/heatModel';
 
 export default function ExplorerPage() {
-  const [hour, setHour] = useState<number>(14);
-  const [flags, setFlags] = useState<LayerFlags>(DEFAULT_FLAGS);
-  const [selected, setSelected] = useState<SelectedPoint | null>(null);
-  const [focusSignal, setFocusSignal] = useState(0);
-
-  // Heavy OSM layers load lazily; the map renders a placeholder until ready.
-  const { layers, ready } = useLayers();
-  const districts = useMemo(() => districtStatsFor(DISTRICTS, hour), [hour]);
-
-  const toggle = (k: keyof LayerFlags) => setFlags((f) => ({ ...f, [k]: !f[k] }));
-
-  return (
-    <div className="explorer">
-      <header className="explorer-head">
-        <div className="container explorer-head-inner">
-          <div>
-            <p className="eyebrow">Urban Heat Explorer</p>
-            <h1>Where does the city feel hottest?</h1>
-          </div>
-          <div className="explorer-solar">
-            <SolarTimeline hour={hour} onChange={(h) => setHour(h)} />
-          </div>
-        </div>
-      </header>
-
-      <div className="explorer-body">
-        {!ready ? (
-          <div className="map-loading">
-            <span className="data-label">Loading urban data…</span>
-          </div>
-        ) : null}
-        <HeatMap
-          hour={hour}
-          layersFlags={flags}
-          onPick={(p) => setSelected(p)}
-          selected={selected}
-          focusSignal={focusSignal}
-          layers={layers}
-          gridTiles={tileLoadState()}
-        />
-        <aside className="explorer-side">
-          <section className="panel">
-            <h2 className="panel-title">Layers</h2>
-            <LayerToggleRow label="Heat exposure" active={flags.heat} onToggle={() => toggle('heat')} />
-            <LayerToggleRow label="Vegetation" active={flags.vegetation} onToggle={() => toggle('vegetation')} />
-            <LayerToggleRow label="Built-up density" active={flags.built} onToggle={() => toggle('built')} />
-            <LayerToggleRow label="Water" active={flags.water} onToggle={() => toggle('water')} />
-            <LayerToggleRow label="Roads" active={flags.roads} onToggle={() => toggle('roads')} />
-            <LayerToggleRow label="Schools (POI)" active={flags.pois} onToggle={() => toggle('pois')} />
-          </section>
-
-          <section className="panel">
-            <h2 className="panel-title">Neighbourhoods</h2>
-            <DistrictQuickLinks
-              districts={districts}
-              onFocus={(lon, lat, z) => {
-                setSelected({ lon, lat, label: '' });
-                setFocusSignal((s) => s + 1);
-                void z;
-              }}
-            />
-          </section>
-
-          <section className="panel">
-            <h2 className="panel-title">Heat scale</h2>
-            <ThermalScale />
-            <ProvenanceNote kind="DERIVED" className="mt" />
-          </section>
-        </aside>
-
-        {selected && <LocationPanel point={selected} hour={hour} onClose={() => setSelected(null)} tiles={tileLoadState()} />}
-      </div>
+  const [hour, setHour] = useState(14); const [selected, setSelected] = useState<SelectedPoint | null>(null);
+  const { value: model, ready, error } = useSpatialModel();
+  if (!ready || !model) return <div className="map-loading"><span className="data-label">Loading Dubai spatial field…</span>{error && <p>{error}</p>}</div>;
+  return <div className="explorer">
+    <header className="explorer-head"><div className="container explorer-head-inner"><div><p className="eyebrow">Urban Heat Explorer</p><h1>One field, explicit coverage limits.</h1></div><div className="explorer-solar"><SolarTimeline hour={hour} onChange={setHour} /></div></div></header>
+    <div className="explorer-body">
+      <HeatMap model={model} hour={hour} selected={selected} onPick={setSelected} />
+      <aside className="explorer-side">
+        <section className="panel"><h2 className="panel-title">Coverage</h2><p className="panel-copy">{model.metadata.coverage.description}</p><div className="coverage-chips">{model.metadata.coverage.requiredAreas.map((name) => <span className="coverage-chip" key={name}>{name}</span>)}</div><p className="mono small-note">{model.metadata.coverage.observedCells.toLocaleString()} supported cells · {model.grid.cellSizeM} m analysis resolution</p></section>
+        <section className="panel"><h2 className="panel-title">Thermal field</h2><ThermalScale /><p className="panel-copy">Raster colours interpolate the model only between nearby supported cells. Contours indicate potential bands, not measured isotherms.</p><ProvenanceNote kind="DERIVED" className="mt" /></section>
+        <section className="panel"><h2 className="panel-title">Land-cover inputs</h2><ul className="method-list"><li>Mapped buildings, roads, vegetation, water, runways and bare land</li><li>Transparent daylight multiplier, not a weather feed</li><li>No shade layer: shade is not shown as observed data</li></ul></section>
+      </aside>
+      {selected && <LocationPanel model={model} point={selected} hour={hour} onClose={() => setSelected(null)} />}
     </div>
-  );
+  </div>;
 }
 
-function LayerToggleRow({ label, active, onToggle }: { label: string; active: boolean; onToggle: () => void }) {
-  return (
-    <button className={`layer-row ${active ? 'is-on' : ''}`} onClick={onToggle} role="switch" aria-checked={active}>
-      <span className="layer-dot" aria-hidden="true" />
-      <span>{label}</span>
-      <span className="layer-switch" aria-hidden="true" />
-    </button>
-  );
-}
-
-function LocationPanel({
-  point,
-  hour,
-  onClose,
-  tiles,
-}: {
-  point: SelectedPoint;
-  hour: number;
-  onClose: () => void;
-  tiles: { lon: number; lat: number; r: number; c: number; b: number; p: number; g: number; wt: number; pd: number; h: number }[];
-}) {
-  const tile = useMemo(() => {
-    const pt: LonLat = { lon: point.lon, lat: point.lat };
-    let best: (typeof tiles)[number] | null = null;
-    let bestD = Infinity;
-    for (const t of tiles) {
-      const d = Math.hypot(t.lat - pt.lat, t.lon - pt.lon);
-      if (d < bestD) {
-        bestD = d;
-        best = t;
-      }
-    }
-    return best;
-  }, [point, tiles]);
-
-  if (!tile) return null;
-  const hi = Math.round(heatIndexFor(tile, hour));
-  const band = heatBand(hi);
-  const st = surfaceTempFor(tile, hour);
-  const air = airTempAtTile(tile, hour);
-  const shade = Math.round(shadePotential(tile) * 100);
-  const name = point.label || `${point.lat.toFixed(3)}, ${point.lon.toFixed(3)}`;
-
-  return (
-    <div className="loc-panel panel" role="dialog" aria-label={`Heat analysis: ${name}`}>
-      <div className="loc-panel-head">
-        <div>
-          <span className="data-label">Selected location</span>
-          <h3>{name}</h3>
-        </div>
-        <button className="icon-btn" onClick={onClose} aria-label="Close panel">
-          ×
-        </button>
-      </div>
-
-      <div className="loc-band">
-        <span className="data-label">Heat Exposure</span>
-        <div className="loc-band-main">
-          <strong>{bandLabel(band)}</strong>
-          <span className="loc-band-num">{hi}<small>/100</small></span>
-        </div>
-        <div className="loc-band-bar" aria-hidden="true">
-          <span style={{ width: `${hi}%` }} />
-        </div>
-      </div>
-
-      <dl className="loc-metrics">
-        <div className="metric">
-          <dt>Surface temperature (model)</dt>
-          <dd>{st.toFixed(1)} °C</dd>
-        </div>
-        <div className="metric">
-          <dt>Air temperature (model)</dt>
-          <dd>{air.toFixed(1)} °C</dd>
-        </div>
-        <div className="metric">
-          <dt>Vegetation</dt>
-          <dd>{Math.round(tile.g * 100)}%</dd>
-        </div>
-        <div className="metric">
-          <dt>Shade potential</dt>
-          <dd>{shade}%</dd>
-        </div>
-        <div className="metric">
-          <dt>Built density</dt>
-          <dd>{Math.round(tile.b * 100)}%</dd>
-        </div>
-      </dl>
-
-      <p className="loc-why">
-        <span className="data-label">Why this score</span>
-        <span className="loc-why-text">
-          {hi >= 64 ? 'Intense built-up geometry and sparse vegetation raise modelled heat retention.' : ''}
-          {hi >= 50 && hi < 64 ? 'Moderate density with limited shade keeps exposure elevated.' : ''}
-          {hi < 50 ? 'Leafy cover and/or water bring the modelled exposure down.' : ''}
-        </span>
-      </p>
-      <ProvenanceNote kind="DERIVED" />
-    </div>
-  );
+function LocationPanel({ model, point, hour, onClose }: { model: NonNullable<ReturnType<typeof useSpatialModel>['value']>; point: SelectedPoint; hour: number; onClose: () => void }) {
+  const field = useMemo(() => calculateBaseField(model, hour), [model, hour]); const sample = useMemo(() => createFieldSampler(model, field)(point.lon, point.lat), [model, field, point]);
+  if (!sample) return <div className="loc-panel panel" role="dialog"><div className="loc-panel-head"><div><span className="data-label">Selected location</span><h3>{point.label}</h3></div><button className="icon-btn" onClick={onClose} aria-label="Close panel">×</button></div><p>This point is outside the OSM-supported field. THERMO does not extrapolate a value here.</p></div>;
+  const { cell, value, interpolated } = sample; const band = heatBand(value);
+  return <div className="loc-panel panel" role="dialog" aria-label={`Thermal analysis: ${point.label}`}><div className="loc-panel-head"><div><span className="data-label">Selected location</span><h3>{point.label}</h3></div><button className="icon-btn" onClick={onClose} aria-label="Close panel">×</button></div>
+    <div className="loc-band"><span className="data-label">Modelled thermal potential</span><div className="loc-band-main"><strong>{bandLabel(band)}</strong><span className="loc-band-num">{Math.round(value)}<small>/100</small></span></div><div className="loc-band-bar" aria-hidden="true"><span style={{ width: `${value}%` }} /></div></div>
+    <dl className="loc-metrics"><div className="metric"><dt>Dominant mapped cover</dt><dd>{cell.cover}</dd></div><div className="metric"><dt>Vegetation support</dt><dd>{Math.round(cell.g * 100)}%</dd></div><div className="metric"><dt>Road support</dt><dd>{Math.round(cell.road * 100)}%</dd></div><div className="metric"><dt>Building cover</dt><dd>{Math.round(cell.b * 100)}%</dd></div></dl>
+    <p className="loc-why"><span className="data-label">Resolution note</span><span className="loc-why-text">{interpolated ? 'Display value interpolated from nearby supported 750 m cells.' : 'Nearest supported 750 m source cell.'} It is not an observed temperature.</span></p><ProvenanceNote kind="DERIVED" />
+  </div>;
 }

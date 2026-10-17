@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:data": "node --max-old-space-size=8192 scripts/data/build-dubai-spatial.mjs"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",
