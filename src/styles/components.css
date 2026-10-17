@@ -48,6 +48,14 @@
   border-color: var(--ember);
   color: var(--ember);
 }
+.hero .hero-cta > .btn-ghost,
+.final-cta .hero-cta > .btn-ghost {
+  color: #fff;
+}
+.hero .hero-cta > .btn-ghost:hover,
+.final-cta .hero-cta > .btn-ghost:hover {
+  color: var(--ember);
+}
 .btn-light {
   background: var(--bg);
   color: var(--ink);
