@@ -9,7 +9,6 @@ THERMO keeps **observed source data**, **derived spatial outputs**, and **hypoth
 | [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), distributed in the [Geofabrik GCC states extract](https://download.geofabrik.de/asia/gcc-states.html) | Buildings, highways, mapped pedestrian/cycle access, parks/vegetation, water, runways, bare land and named places | Extract timestamp **2026-10-15T20:21:00Z** | ODbL 1.0 |
 | [HDX/OCHA COD-AB UAE admin-1](https://data.humdata.org/dataset/cod-ab-are) | Dubai Emirate (`AE02`) boundary used to constrain the analysis window | v01, valid from 2023-05-15 | CC BY-IGO |
 | [Valhalla route API](https://valhalla.github.io/valhalla/api/route/api-reference/) via `valhalla1.openstreetmap.de` | Live pedestrian and bicycle route geometries using an OSM routing network | Requested at route time | Provider availability is best-effort; underlying network is OSM-derived |
-| [NASA MODIS Land Surface Temperature and Emissivity](https://modis.gsfc.nasa.gov/data/dataprod/mod11.php) via [NASA Earthdata GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | Global viewport-loaded satellite land-surface-temperature imagery | Fixed product date `2025-01-01` in `GlobalThermalLayer.tsx`; approximately 1 km source pixels | NASA Earthdata terms / attribution; cloud and retrieval gaps apply |
 
 OpenStreetMap attribution remains visible on every map. Any redistribution of OSM-derived artefacts must respect the ODbL.
 
@@ -17,14 +16,11 @@ OpenStreetMap attribution remains visible on every map. Any redistribution of OS
 
 `public/data/dubai-spatial-model.json` is the single source used by the Explorer, Simulator and route-metric sampler.
 
-The Explorer also includes a separate global context layer. `src/components/maps/GlobalThermalLayer.tsx` uses NASA GIBS WMTS tiles, so Leaflet requests only tiles intersecting the current viewport. The map can zoom and pan across the UAE or the world without a giant bundled raster. This does not expand the local THERMO model: outside supported Dubai cells, the app shows satellite land-surface-temperature context only and does not create local potential, land-cover intervention masks, shade, or routes.
-
 - **Coverage:** OSM-supported urban cells within the verified Dubai boundary and an explicit urban window. Areas with no source support are absent/transparent. THERMO does not stretch or extrapolate the former Downtown grid.
 - **Resolution:** 750 m analysis cells. Each cell stores derived support fractions for buildings, roads, mapped vegetation, water, runways, bare land, mapped walk/cycle network and named-place density.
 - **Land-cover categories:** `building=*`; `highway=*`; green `landuse`/`leisure`/`natural` tags; `natural=water`, `water=*`, basin/reservoir; `aeroway=runway|taxiway`; and mapped bare/construction classes. Mapping completeness varies.
 - **Thermal field:** a unitless 0–100 **modelled thermal potential**, derived from the shared cell fractions and a transparent daylight factor. It is not air temperature, land-surface temperature, a health score, or a satellite product.
 - **Continuous rendering:** the Leaflet canvas raster uses local bilinear interpolation only among supported cells. Contours at 40/55/70/82 are model bands. Interpolation improves legibility but does not create sub-cell measurements.
-- **Global tiles:** NASA MODIS Terra daytime LST is a separate observed satellite browse product. It is not blended into the 0–100 modelled field, not used by the simulator, and not used as a route edge cost. It may contain clouds, missing retrievals, and date-specific conditions.
 
 ## Intervention simulation
 

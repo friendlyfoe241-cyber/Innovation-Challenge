@@ -29,17 +29,6 @@ export interface DatasetMeta {
 
 export const DATASETS: DatasetMeta[] = [
   {
-    id: 'nasa-modis-lst-global',
-    name: 'NASA MODIS Terra daytime land-surface temperature tiles',
-    source: 'NASA Earthdata GIBS / MODIS MOD11 browse product',
-    category: 'OBSERVED',
-    resolution: 'global browse tiles; approximately 1 km source pixels',
-    accessDate: '2025-01-01 product date configured in the tile URL',
-    license: 'NASA Earthdata terms; source attribution required',
-    url: 'https://modis.gsfc.nasa.gov/data/dataprod/mod11.php',
-    description: 'Viewport-loaded global satellite land-surface-temperature imagery. Cloud and retrieval gaps remain transparent or unavailable; it is not air temperature or THERMO’s modelled potential.',
-  },
-  {
     id: 'osm-snapshot',
     name: 'OpenStreetMap Dubai urban geometry & access tags',
     source: 'OpenStreetMap contributors via Geofabrik GCC states extract',
@@ -86,8 +75,6 @@ export const DATASETS: DatasetMeta[] = [
 ];
 
 export const DUBAI_DEFAULT_VIEW = { lat: 25.130, lon: 55.255, zoom: 10.55 };
-export const GLOBAL_DEFAULT_VIEW = { lat: 24, lon: 54, zoom: 4 };
-export const GLOBAL_MAP_BOUNDS: [[number, number], [number, number]] = [[-85.051129, -180], [85.051129, 180]];
 
 
 /**
