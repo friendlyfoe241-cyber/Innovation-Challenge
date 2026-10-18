@@ -1,6 +1,6 @@
-# THERMO — Dubai Heat-Aware Urban Intelligence
+# THERMO — Dubai + global heat-aware urban intelligence
 
-THERMO is a React + TypeScript + Vite prototype for exploring **modelled thermal exposure**, testing constrained urban interventions, and requesting heat-aware walk/cycle routes in Dubai. It is an innovation prototype, not a weather product, medical heat-risk system, navigation guarantee, or planning approval tool.
+THERMO is a React + TypeScript + Vite prototype for exploring a global satellite land-surface-temperature context layer plus **modelled thermal exposure**, constrained interventions, and heat-aware walk/cycle routes in Dubai. It is an innovation prototype, not a weather product, medical heat-risk system, navigation guarantee, or planning approval tool.
 
 > Product loop: **Observe → Navigate → Improve**. Brand language: warm sunlight, asphalt, shade, maps, environmental data and calm engineering. Avoid synthetic “AI” styling and claims of false precision.
 
@@ -24,6 +24,7 @@ THERMO is a React + TypeScript + Vite prototype for exploring **modelled thermal
 - Custom CSS lives in `src/styles/`; no Tailwind.
 - `src/types/domain.ts` defines the shared `SpatialModel`, `SpatialCell`, source metadata and local-search contracts.
 - `src/data/datasets.ts` lazily fetches the static spatial model from `public/data/dubai-spatial-model.json`.
+- `src/components/maps/GlobalThermalLayer.tsx` lazily requests only visible NASA GIBS MODIS land-surface-temperature tiles. This layer is global, observed satellite browse imagery and must not be treated as the local modelled potential.
 - `src/lib/heat/heatModel.ts` is the sole thermal-potential function and sampler. Explorer, simulation and route metrics must use it—not independent formulas.
 - `src/lib/simulation/scenarioModel.ts` applies eligibility masks and local spill-over only. It must never use a blanket temperature subtraction or multiplier.
 - `src/lib/routing/routeEngine.ts` requests Valhalla pedestrian/bicycle OSM routing and samples returned real geometry against the shared field.
@@ -46,10 +47,16 @@ The thermal value is a **dimensionless 0–100 modelled potential**. It is not a
 | OpenStreetMap contributors / Geofabrik GCC extract | Buildings, highways, access, vegetation, water, runways, bare land, named places | OSM snapshot 2026-10-15T20:21:00Z; ODbL 1.0; attribution required |
 | HDX/OCHA COD-AB UAE admin-1 v01 | Dubai Emirate (`AE02`) boundary used to constrain the urban analysis window | valid from 2023-05-15; CC BY-IGO |
 | Valhalla public OSM route endpoint | Real walk/cycle paths with provider access/costing rules | best-effort public service; CORS checked 2026-10-16 |
+| NASA Earthdata GIBS / MODIS Terra daytime LST | Viewport-loaded global land-surface-temperature tiles, configured for 2025-01-01 | global browse imagery; approximately 1 km source pixels; cloud/retrieval gaps; attribution required |
 
 Source URLs and detailed licence/method notes are in `DATA.md` and `/about`.
 
 ## Coverage & field resolution
+
+The Explorer has two deliberately separate spatial layers:
+
+- **Global context:** NASA GIBS tiles are requested by Leaflet for the visible viewport only, from zoom 2 through the native Level 7 tile matrix. This gives world/UAE visual coverage without bundling or inventing a world raster. It is observed satellite land-surface temperature, not air temperature, shade, or THERMO potential.
+- **Dubai local model:** `public/data/dubai-spatial-model.json` contains 4,414 OSM-supported 750 m cells in the verified Dubai boundary and explicit urban window. It remains the only layer used by the local field sampler, simulator and route metrics.
 
 `public/data/dubai-spatial-model.json` currently contains **4,414 OSM-supported 750 m cells** in an explicit urban Dubai window (`24.75–25.45 N`, `54.85–55.72 E`) constrained by the verified Dubai boundary. It includes data-supported coverage around Downtown, Deira, Dubai Marina, Mirdif, Al Barsha, Dubai Hills and Dubai South.
 
@@ -98,7 +105,7 @@ This is categorical thermal avoidance, not continuous calibrated thermal cost. D
 1. Download the HDX/OCHA UAE boundary and Geofabrik GCC PBF snapshot.
 2. Use `osmium` to extract the Dubai urban window and selected OSM tags.
 3. Export thematic GeoJSON.
-4. Run `npm run build:data` to create the committed static model and routing-provider metadata.
+4. Run `npm run build:data` to create the committed static Dubai model and routing-provider metadata. Do not download or bundle the global NASA tile archive; the browser loads those tiles on demand.
 
 See `DATA.md` for exact commands. Do not silently substitute old Downtown raw files, random values or a widened grid when rebuilding.
 
@@ -119,6 +126,7 @@ Before a milestone commit: inspect `git status` and diffs, run relevant build/li
 - No satellite LST, weather-station/air-temperature data, humidity, wind, sensors, surveyed canopy or verified shade raster.
 - OSM completeness and access tagging vary; paths are provider results, not a safety/access guarantee.
 - Public Valhalla routing availability is best-effort and its OSM snapshot can differ from the fixed spatial-model snapshot.
+- Global MODIS LST imagery is land-surface temperature, not the Dubai modelled potential. It is time-specific, cloud/retrieval-limited, and does not provide land-cover intervention masks or global pedestrian routing.
 - Thermal potential and all intervention reductions are modelled, not observed or validated outcomes.
 
 ## Map-layer performance & wrap fix (Oct 2026)
