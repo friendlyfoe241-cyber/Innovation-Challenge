@@ -1000,7 +1000,6 @@
   margin-top: 6px;
   letter-spacing: -0.02em;
   color: var(--ink);
-  max-width: 22ch;
 }
 .route-body {
   display: flex;
