@@ -4,6 +4,7 @@ import type { SpatialModel } from '../../types/domain';
 import { DUBAI_DEFAULT_VIEW, mapBoundsFor } from '../../data/datasets';
 import { ThermalFieldLayer } from './ThermalFieldLayer';
 import { GlobalThermalLayer } from './GlobalThermalLayer';
+import { NasaLstMapNote } from '../ui/NasaLstNote';
 
 type ScenarioView = 'baseline' | 'scenario' | 'difference';
 export function InterventionMap({ model, values, view }: { model: SpatialModel; values: { baseline: Map<number, number>; scenario: Map<number, number>; difference: Map<number, number> }; view: ScenarioView }) {
@@ -16,5 +17,6 @@ export function InterventionMap({ model, values, view }: { model: SpatialModel; 
       <ThermalFieldLayer model={model} values={field} opacity={0.72} palette={view === 'difference' ? 'difference' : 'thermal'} contours={view !== 'difference'} />
     </MapContainer>
     <div className="field-map-note"><span className="data-label">{view === 'difference' ? 'SCENARIO − BASELINE' : view.toUpperCase()}</span><span>{view === 'difference' ? 'blue = lower modelled potential; red = higher' : `${model.grid.cellSizeM} m source cells; smooth rendering does not add observations`}</span></div>
+    <NasaLstMapNote />
   </div>;
 }

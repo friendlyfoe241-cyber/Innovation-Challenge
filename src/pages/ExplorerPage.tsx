@@ -3,6 +3,7 @@ import { HeatMap, type SelectedPoint } from '../components/maps/HeatMap';
 import { ThermalScale } from '../components/ui/ThermalScale';
 import { SolarTimeline } from '../components/ui/SolarTimeline';
 import { ProvenanceNote } from '../components/ui/Provenance';
+import { NasaLstPanelNote } from '../components/ui/NasaLstNote';
 import { useSpatialModel } from '../hooks/useData';
 import { bandLabel, calculateBaseField, createFieldSampler, heatBand } from '../lib/heat/heatModel';
 
@@ -16,6 +17,7 @@ export default function ExplorerPage() {
       <HeatMap model={model} hour={hour} selected={selected} onPick={setSelected} />
       <aside className="explorer-side">
         <section className="panel"><h2 className="panel-title">Coverage</h2><p className="panel-copy">{model.metadata.coverage.description}</p><p className="panel-copy"><strong>Global satellite layer:</strong> NASA MODIS Terra daytime land-surface temperature tiles load only for the visible map area. UAE and worldwide tiles are available, but they are a separate observed satellite product rather than the Dubai modelled potential.</p><div className="coverage-chips">{model.metadata.coverage.requiredAreas.map((name) => <span className="coverage-chip" key={name}>{name}</span>)}</div><p className="mono small-note">{model.metadata.coverage.observedCells.toLocaleString()} supported Dubai cells · {model.grid.cellSizeM} m local analysis · global tile source approx. 1 km</p></section>
+        <NasaLstPanelNote />
         <section className="panel"><h2 className="panel-title">Thermal field</h2><ThermalScale /><p className="panel-copy">The smooth coloured field and contours are the Dubai model only where supported cells exist. Outside that footprint, the map shows NASA MODIS land-surface temperature tiles with cloud and observation gaps. These products are not interchangeable.</p><ProvenanceNote kind="DERIVED" className="mt" /></section>
         <section className="panel"><h2 className="panel-title">Land-cover inputs</h2><ul className="method-list"><li>Mapped buildings, roads, vegetation, water, runways and bare land</li><li>Transparent daylight multiplier, not a weather feed</li><li>No shade layer: shade is not shown as observed data</li></ul></section>
       </aside>

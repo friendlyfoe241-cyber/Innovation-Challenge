@@ -6,6 +6,7 @@ import type { RouteResult } from '../../lib/routing/routeEngine';
 import { DUBAI_DEFAULT_VIEW, mapBoundsFor } from '../../data/datasets';
 import { ThermalFieldLayer } from './ThermalFieldLayer';
 import { GlobalThermalLayer } from './GlobalThermalLayer';
+import { NasaLstMapNote } from '../ui/NasaLstNote';
 import { calculateBaseField } from '../../lib/heat/heatModel';
 
 function MapPick({ onMapClick }: { onMapClick: (p: LonLat) => void }) {
@@ -38,6 +39,7 @@ export function RouteMap({ model, hour, routes, origin, destination, activeId, o
       <FitRoutes routes={routes} />
     </MapContainer>
     <div className="field-map-note"><span className="data-label">ROUTE COST</span><span>ETA + sampled modelled potential on each OSM edge</span></div>
+    <NasaLstMapNote />
     {!routes.length && <div className="route-map-hint"><span className="data-label">Choose start and end from the OSM place search, or click the map to set an end point.</span></div>}
   </div>;
 }

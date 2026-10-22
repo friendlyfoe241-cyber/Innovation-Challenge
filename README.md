@@ -15,9 +15,11 @@ It helps people **understand** urban heat, **navigate** it more safely, and
 
 ## Data integrity
 
-THERMO separates **observed** (OpenStreetMap), **derived** (computed with documented
-formulas) and **simulated** (demonstration) values. Temperatures and heat indices are
-**modelled estimates**, never presented as real measurements. See `DATA.md`.
+THERMO separates **observed** (OpenStreetMap snapshot, HDX/OCHA Dubai boundary, NASA browse imagery), **derived** (computed with documented formulas) and **simulated** (demonstration) values. The thermal potential is a **dimensionless 0–100 modelled index**, never presented as a measured temperature. The NASA satellite layer is visual context only — it is not used in the model, routing or simulations. See `DATA.md`.
+
+## NASA satellite context layer
+
+The maps include a NASA Earthdata GIBS layer (`MODIS_Terra_Land_Surface_Temp_Day`, configured date 2025-01-01, ~1 km native MODIS LST). It loads only the tiles visible in the current viewport. It is land-surface temperature from a fixed historical date, not a live temperature map and not THERMO's prediction; colours are a browse palette with no Celsius legend in this implementation.
 
 ## Development
 
@@ -29,17 +31,18 @@ npm run preview   # preview the production build
 npm run lint      # oxlint
 ```
 
-Requires Node ≥ 20. No API keys are required — the app runs in Demo Mode by default.
+Requires Node ≥ 20. No API keys are required to view the deployed app (routing uses the best-effort public Valhalla provider; the NASA layer is public GIBS tiles). Numerical satellite validation is a separate offline workflow that needs a free NASA Earthdata Login — see `DATA.md`.
 
 ## Data pipeline
 
+The committed spatial model is built from a fixed OSM snapshot (Geofabrik GCC extract) clipped to Dubai and the HDX/OCHA boundary, then processed with `osmium` and:
+
 ```bash
-node scripts/data/fetch-overpass.mjs   # pull OSM data for the Dubai corridor
-node scripts/data/process.mjs          # build tiles.json / layers.json / graph.json
+npm run build:data   # node --max-old-space-size=8192 scripts/data/build-dubai-spatial.mjs
 ```
+
+The NASA tiles are not bundled — the browser loads only what it needs from GIBS. Numerical MODIS LST validation scripts (Earthdata-credentialed) live in `scripts/data/` (see `DATA.md`).
 
 ## Status
 
-Bundled demo data covers a ~44 km² corridor of central Dubai
-(Downtown, Business Bay, DIFC, Zabeel, Al Safa). See `AGENTS.md` for the full
-implementation status and decisions.
+Bundled model covers OSM-supported urban Dubai within the verified Dubai Emirate boundary (4,414 × 750 m cells; Deira, Dubai Marina, Mirdif, Al Barsha, Dubai Hills, Dubai South and more), plus a global NASA satellite context layer. See `AGENTS.md` for the full implementation status and decisions.

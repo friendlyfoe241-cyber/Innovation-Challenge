@@ -24,7 +24,9 @@ THERMO is a React + TypeScript + Vite prototype for exploring a global satellite
 - Custom CSS lives in `src/styles/`; no Tailwind.
 - `src/types/domain.ts` defines the shared `SpatialModel`, `SpatialCell`, source metadata and local-search contracts.
 - `src/data/datasets.ts` lazily fetches the static spatial model from `public/data/dubai-spatial-model.json`.
-- `src/components/maps/GlobalThermalLayer.tsx` lazily requests only visible NASA GIBS MODIS land-surface-temperature tiles. This layer is global, observed satellite browse imagery and must not be treated as the local modelled potential.
+- `src/data/nasaLst.ts` is the single source of truth for the NASA GIBS layer constants (product id, fixed date, tile URL, verified resolution facts) and the `NASA_LST` copy used by the UI notes.
+- `src/components/maps/GlobalThermalLayer.tsx` lazily requests only visible NASA GIBS MODIS land-surface-temperature tiles via those constants. This layer is global, observed satellite browse imagery and must not be treated as the local modelled potential.
+- `src/components/ui/NasaLstNote.tsx` renders the "NASA LST · VIEW ONLY" map note and the Explorer "Satellite context layer" panel. Never imply a Celsius legend for the GIBS PNG colours: no verified decoding path exists in this implementation.
 - `src/lib/heat/heatModel.ts` is the sole thermal-potential function and sampler. Explorer, simulation and route metrics must use it—not independent formulas.
 - `src/lib/simulation/scenarioModel.ts` applies eligibility masks and local spill-over only. It must never use a blanket temperature subtraction or multiplier.
 - `src/lib/routing/routeEngine.ts` requests Valhalla pedestrian/bicycle OSM routing and samples returned real geometry against the shared field.
@@ -109,6 +111,10 @@ This is categorical thermal avoidance, not continuous calibrated thermal cost. D
 
 See `DATA.md` for exact commands. Do not silently substitute old Downtown raw files, random values or a widened grid when rebuilding.
 
+### Numerical satellite validation (offline)
+
+`scripts/data/fetch-modis-lst.sh` (Earthdata-token authenticated retrieval of MOD11A1.061 HDF for SIN tile `h23v06`) and `scripts/data/validate-modis-lst.mjs` (QC-filtered, rank-based spatial comparison of numerical LST vs the modelled field) are the sanctioned validation path. They never run in the browser, never require an API key from app users, and the validator refuses to fabricate a result with too few valid samples. See DATA.md §"Numerical satellite-validation workflow".
+
 ## Development & validation
 
 | Action | Command |
@@ -123,7 +129,7 @@ Before a milestone commit: inspect `git status` and diffs, run relevant build/li
 
 ## Current limitations
 
-- No satellite LST, weather-station/air-temperature data, humidity, wind, sensors, surveyed canopy or verified shade raster.
+- No numerically ingested satellite LST, weather-station/air-temperature data, humidity, wind, sensors, surveyed canopy or verified shade raster. The NASA GIBS layer is browse imagery for context only; numerical LST validation is a prepared offline workflow waiting for Earthdata credentials.
 - OSM completeness and access tagging vary; paths are provider results, not a safety/access guarantee.
 - Public Valhalla routing availability is best-effort and its OSM snapshot can differ from the fixed spatial-model snapshot.
 - Global MODIS LST imagery is land-surface temperature, not the Dubai modelled potential. It is time-specific, cloud/retrieval-limited, and does not provide land-cover intervention masks or global pedestrian routing.

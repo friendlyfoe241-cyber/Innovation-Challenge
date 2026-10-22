@@ -5,6 +5,7 @@ import type { LonLat, SpatialModel } from '../../types/domain';
 import { DUBAI_DEFAULT_VIEW, GLOBAL_MAP_BOUNDS } from '../../data/datasets';
 import { ThermalFieldLayer } from './ThermalFieldLayer';
 import { GlobalThermalLayer } from './GlobalThermalLayer';
+import { NasaLstMapNote } from '../ui/NasaLstNote';
 import { calculateBaseField } from '../../lib/heat/heatModel';
 
 export interface SelectedPoint extends LonLat { label: string; }
@@ -33,6 +34,7 @@ export function HeatMap({ model, hour, selected, onPick }: { model: SpatialModel
       <CenterTracker target={readout} />
     </MapContainer>
     <div className="field-map-note"><span className="data-label">GLOBAL + LOCAL FIELD</span><span>NASA MODIS LST tiles load by viewport · Dubai modelled field remains {model.grid.cellSizeM} m · contours 40 / 55 / 70 / 82</span></div>
+    <NasaLstMapNote />
     <div className="map-cursor-readout"><span className="data-label">Cursor</span><span className="mono" ref={readout}>{DUBAI_DEFAULT_VIEW.lat.toFixed(4)}°N · {DUBAI_DEFAULT_VIEW.lon.toFixed(4)}°E</span><span className="prov-tag" data-prov="DERIVED">OSM-derived</span></div>
   </div>;
 }

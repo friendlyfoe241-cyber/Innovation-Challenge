@@ -4,7 +4,7 @@ const META: Record<DataProvenance, { label: string; title: string; body: string 
   OBSERVED: {
     label: 'Observed data',
     title: 'Observed data',
-    body: 'Sourced from a documented public dataset (OpenStreetMap, via the Overpass API).',
+    body: 'Sourced from documented public datasets: a fixed OpenStreetMap geometry snapshot and the official Dubai Emirate boundary.',
   },
   DERIVED: {
     label: 'Derived',

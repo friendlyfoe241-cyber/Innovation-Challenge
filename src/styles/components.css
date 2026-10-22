@@ -2344,6 +2344,19 @@
 /* ============ Spatial model revision ============ */
 .thermo-field-canvas { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; }
 .field-map-note { position: absolute; z-index: 600; right: 12px; top: 12px; max-width: min(320px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid rgb(35 42 38 / 0.22); border-radius: var(--radius-s); background: rgb(246 242 234 / 0.92); box-shadow: var(--shadow-1); color: var(--ink-2); font-size: 11.5px; line-height: 1.35; backdrop-filter: blur(6px); }
+.nasa-lst-note { position: absolute; z-index: 599; right: 12px; top: 12px; width: min(264px, calc(100% - 24px)); border: 1px solid rgb(35 42 38 / 0.22); border-radius: var(--radius-s); background: rgb(240 244 238 / 0.94); box-shadow: var(--shadow-1); font-size: 11.5px; line-height: 1.45; color: var(--ink-2); backdrop-filter: blur(6px); }
+.nasa-lst-note-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 7px 10px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.nasa-lst-note-head:hover { background: rgb(35 42 38 / 0.05); }
+.nasa-lst-note-head .nasa-lst-caret { font-family: var(--font-mono); color: var(--ink-3); }
+.nasa-lst-note-body { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 9px; border-top: 1px solid rgb(35 42 38 / 0.14); }
+.nasa-lst-note-body p { margin: 0; }
+.nasa-lst-note-body a { color: var(--ember); text-decoration: underline; text-underline-offset: 2px; }
+.nasa-lst-note[data-open='false'] .nasa-lst-note-body { display: none; }
+.nasa-lst-meta { margin: 0 0 10px; }
+.nasa-lst-meta div { border-bottom: 1px solid var(--line); padding: 7px 0; }
+.nasa-lst-meta dt { color: var(--ink-3); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 2px; }
+.nasa-lst-meta dd { margin: 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+@media (max-width: 720px) { .nasa-lst-note { top: auto; bottom: 52px; left: 64px; right: 12px; width: auto; } }
 .panel-copy, .small-note { color: var(--ink-3); font-size: 12.5px; line-height: 1.55; margin: 0; }
 .coverage-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
 .coverage-chip { padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--ink-2); font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; }
